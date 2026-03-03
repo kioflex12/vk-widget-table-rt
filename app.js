@@ -14,19 +14,15 @@
   const dataView = document.getElementById('dataView');
   const codeView = document.getElementById('codeView');
 
-  // ====== ХАРДКОД КОНФИГА ======
   const APPS_SCRIPT_URL =
-    'https://script.google.com/macros/s/AKfycbwGkvaoitoposwY5fRuRgtsAixIbL5fBkpKdxARs33Nbcj9KOuYrkNjAM2-jXWkNhfy/exec';
-  const SHEET_NAME = 'RT';
+    "https://script.google.com/macros/s/AKfycbwGkvaoitoposwY5fRuRgtsAixIbL5fBkpKdxARs33Nbcj9KOuYrkNjAM2-jXWkNhfy/exec";
+  const SHEET_NAME = "RT";
   const LIMIT = 10;
-  // =============================
 
   let groupId = null;
   let appId = null;
   let communityToken = null;
   let loaded = null;
-
-  const resolveCache = new Map();
 
   function parseLaunchParams() {
     const sp = new URLSearchParams(window.location.search);
@@ -40,123 +36,21 @@
     vkPill.textContent = 'vk_platform: ' + (lp.vk_platform ?? '—');
   }
 
-  function escapeHtml(s) {
-    return String(s)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#39;');
+  function setOk(text) {
+    state.innerHTML = '<span class="ok">' + text + '</span>';
   }
 
-  function setStateOk(text) {
-    state.innerHTML = '<span class="ok">' + escapeHtml(text) + '</span>';
+  function setBad(text) {
+    state.innerHTML = '<span class="bad">' + text + '</span>';
   }
 
-  function setStateBad(text) {
-    state.innerHTML = '<span class="bad">' + escapeHtml(text) + '</span>';
-  }
-
-  // JSONP чтобы обойти 302/CORS в VK WebView
-  function jsonp(url) {
-    return new Promise((resolve, reject) => {
-      const cbName = '__vk_jsonp_cb_' + Math.random().toString(36).slice(2);
-      let script = null;
-
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error('JSONP timeout'));
-      }, 15000);
-
-      function cleanup() {
-        clearTimeout(timeout);
-        try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
-        if (script && script.parentNode) script.parentNode.removeChild(script);
-      }
-
-      window[cbName] = (data) => {
-        cleanup();
-        resolve(data);
-      };
-
-      const sep = url.includes('?') ? '&' : '?';
-      const full = url + sep + 'callback=' + encodeURIComponent(cbName) + '&t=' + Date.now();
-
-      script = document.createElement('script');
-      script.src = full;
-      script.async = true;
-      script.onerror = () => {
-        cleanup();
-        reject(new Error('JSONP load error'));
-      };
-      document.head.appendChild(script);
-    });
-  }
-
-  function extractScreenName(vkField) {
-    const s = (vkField || '').trim();
+  function buildProfileUrl(vkValue) {
+    const s = (vkValue || '').trim();
     if (!s) return null;
 
-    if (/^\d+$/.test(s)) return null; // already numeric
-    const mId = s.match(/(?:vk\.com\/|\/)id(\d+)(?:\b|\/|$)/i);
-    if (mId && mId[1]) return null;
+    if (s.startsWith('http://') || s.startsWith('https://')) return s;
 
-    const m = s.match(/vk\.com\/([A-Za-z0-9_.]+)/i);
-    if (m && m[1]) return m[1];
-
-    if (/^[A-Za-z0-9_.]+$/.test(s)) return s;
-
-    return null;
-  }
-
-  async function resolveScreenNameToUserId(screenName) {
-    if (!screenName) return null;
-    if (resolveCache.has(screenName)) return resolveCache.get(screenName);
-
-    const url =
-      'https://api.vk.com/method/utils.resolveScreenName' +
-      '?v=5.199' +
-      '&screen_name=' + encodeURIComponent(screenName);
-
-    const json = await jsonp(url);
-
-    let id = null;
-    if (json && json.response && json.response.type === 'user' && json.response.object_id) {
-      id = Number(json.response.object_id);
-    }
-
-    resolveCache.set(screenName, id);
-    return id;
-  }
-
-  async function normalizeRowsWithResolvedIds(rows) {
-    const out = rows.map(r => ({ ...r, resolved_id: null }));
-
-    const toResolve = [];
-    for (const r of out) {
-      const s = (r.vk || '').trim();
-      if (!s) continue;
-
-      if (/^\d+$/.test(s)) {
-        r.resolved_id = Number(s);
-        continue;
-      }
-
-      const mId = s.match(/(?:vk\.com\/|\/)id(\d+)(?:\b|\/|$)/i);
-      if (mId && mId[1]) {
-        r.resolved_id = Number(mId[1]);
-        continue;
-      }
-
-      const screen = extractScreenName(s);
-      if (screen) toResolve.push({ r, screen });
-    }
-
-    for (const item of toResolve) {
-      item.r.resolved_id = await resolveScreenNameToUserId(item.screen);
-    }
-
-    return out;
+    return 'https://vk.com/' + s;
   }
 
   function buildWidgetObject(rows) {
@@ -169,21 +63,10 @@
     const body = rows.slice(0, LIMIT).map(r => {
       const placeCell = { text: String(r.place || ''), align: 'center' };
 
-      let url = null;
-      let icon_id = null;
-
-      if (r.resolved_id && Number.isFinite(r.resolved_id)) {
-        url = 'https://vk.com/id' + r.resolved_id;
-        icon_id = 'id' + r.resolved_id;
-      } else {
-        const s = (r.vk || '').trim();
-        if (s.startsWith('http://') || s.startsWith('https://')) url = s;
-        else if (s) url = 'https://vk.com/' + s;
-      }
-
-      const playerCell = icon_id
-        ? { text: r.nick, icon_id: icon_id, url: url || undefined }
-        : (url ? { text: r.nick, url: url } : { text: r.nick });
+      const url = buildProfileUrl(r.vk);
+      const playerCell = url
+        ? { text: r.nick, url: url }
+        : { text: r.nick };
 
       const rtCell = { text: String(r.rt || ''), align: 'center' };
 
@@ -201,29 +84,37 @@
     return 'return ' + JSON.stringify(widgetObj) + ';';
   }
 
-  async function loadDataFromAppsScript() {
-    const url = APPS_SCRIPT_URL +
+  async function loadData() {
+    const url =
+      APPS_SCRIPT_URL +
       '?sheet=' + encodeURIComponent(SHEET_NAME) +
-      '&limit=' + encodeURIComponent(String(LIMIT));
+      '&limit=' + encodeURIComponent(String(LIMIT)) +
+      '&t=' + Date.now();
 
-    const json = await jsonp(url);
+    const resp = await fetch(url, { cache: "no-store" });
 
-    if (!json || !Array.isArray(json.rows)) {
-      throw new Error('Неверный формат ответа Apps Script. Должно быть { rows: [...] }');
+    if (!resp.ok) {
+      throw new Error("HTTP error: " + resp.status);
     }
 
-    const rows = json.rows.map(x => ({
-      place: String(x.place || '').trim(),
+    const json = await resp.json();
+
+    if (!json || !Array.isArray(json.rows)) {
+      throw new Error("Неверный формат ответа Apps Script");
+    }
+
+    const rows = json.rows.map((x, idx) => ({
+      place: String(x.place || (idx + 1)),
       nick: String(x.nick || '').trim(),
       vk: String(x.vk || '').trim(),
       rt: String(x.rt || '').trim()
     })).filter(x => x.nick.length > 0);
 
     if (rows.length === 0) {
-      throw new Error('В таблице нет данных (проверь лист RT и колонки).');
+      throw new Error("В таблице нет данных");
     }
 
-    loaded = await normalizeRowsWithResolvedIds(rows);
+    loaded = rows;
 
     dataView.textContent = JSON.stringify({ rows: loaded }, null, 2);
 
@@ -232,8 +123,8 @@
   }
 
   async function updateWidget() {
-    if (!communityToken) throw new Error('Сначала получи токен (кнопка 1).');
-    if (!loaded) await loadDataFromAppsScript();
+    if (!communityToken) throw new Error("Сначала получи токен");
+    if (!loaded) await loadData();
 
     const widget = buildWidgetObject(loaded);
     const code = buildCode(widget);
@@ -251,11 +142,11 @@
     });
 
     const out = await resp.json();
-    if (out.error) throw new Error('VK API error: ' + JSON.stringify(out.error));
+    if (out.error) throw new Error(JSON.stringify(out.error));
   }
 
   async function previewWidget() {
-    if (!loaded) await loadDataFromAppsScript();
+    if (!loaded) await loadData();
     const widget = buildWidgetObject(loaded);
     const code = buildCode(widget);
     await bridge.send('VKWebAppShowAppWidgetPreviewBox', { type: 'table', code });
@@ -266,11 +157,11 @@
     await bridge.send('VKWebAppInit');
 
     btnAuth.addEventListener('click', async () => {
-      state.textContent = '';
       if (!groupId || !appId) {
-        setStateBad('Открой мини-приложение из сообщества (как админ), чтобы появился group_id.');
+        setBad("Открой приложение из группы (как админ)");
         return;
       }
+
       try {
         const res = await bridge.send('VKWebAppGetCommunityAuthToken', {
           app_id: appId,
@@ -278,41 +169,37 @@
           scope: 'app_widget'
         });
         communityToken = res.access_token;
-        setStateOk('Токен получен ✅');
+        setOk("Токен получен");
       } catch (e) {
-        const msg = (e && e.error_data) ? JSON.stringify(e.error_data) : String(e);
-        setStateBad('Ошибка токена: ' + msg);
+        setBad("Ошибка токена");
       }
     });
 
     btnLoad.addEventListener('click', async () => {
-      state.textContent = '';
       try {
-        await loadDataFromAppsScript();
-        setStateOk('Данные загружены ✅');
+        await loadData();
+        setOk("Данные загружены");
       } catch (e) {
-        setStateBad(String(e.message || e));
+        setBad(e.message);
       }
     });
 
     btnPreview.addEventListener('click', async () => {
-      state.textContent = '';
       try {
         await previewWidget();
-        setStateOk('Предпросмотр открыт ✅');
+        setOk("Предпросмотр открыт");
       } catch (e) {
-        setStateBad(String(e.message || e));
+        setBad(e.message);
       }
     });
 
     btnUpdate.addEventListener('click', async () => {
-      state.textContent = '';
       try {
-        await loadDataFromAppsScript();
+        await loadData();
         await updateWidget();
-        setStateOk('Виджет обновлён ✅');
+        setOk("Виджет обновлён");
       } catch (e) {
-        setStateBad(String(e.message || e));
+        setBad(e.message);
       }
     });
   }
