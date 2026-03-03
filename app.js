@@ -1,4 +1,6 @@
-// Защита от двойного запуска (на случай кеша/повторной инициализации)
+// app.js — CSV версия (без Apps Script, без JSONP, без Cloudflare)
+// Источник: опубликованная таблица Google Sheets (pub -> output=csv)
+
 if (window.__RT_WIDGET_APP_LOADED__) {
   console.warn("RT widget app already loaded");
 } else {
@@ -20,7 +22,8 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     const dataView = document.getElementById('dataView');
     const codeView = document.getElementById('codeView');
 
-    // === Хардкод твоей опубликованной таблицы ===
+    // === ТВОЯ опубликованная таблица ===
+    // https://docs.google.com/spreadsheets/d/e/<PUB_ID>/pubhtml?gid=0&single=true
     const PUB_ID = "2PACX-1vRWC87JHjXGFuyoDwB3iyJLPkzExdiwRwxZu2SKpHv-G1t3oeGE4Kxu35ne0PgJbHWxqaVGq-28kfRE";
     const SHEET_GID = 0;
     const LIMIT = 10;
@@ -54,9 +57,9 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       groupId = lp.vk_group_id ? Number(lp.vk_group_id) : null;
       appId = lp.vk_app_id ? Number(lp.vk_app_id) : null;
 
-      groupPill.textContent = 'group_id: ' + (groupId ?? '—');
-      appPill.textContent = 'app_id: ' + (appId ?? '—');
-      vkPill.textContent = 'vk_platform: ' + (lp.vk_platform ?? '—');
+      if (groupPill) groupPill.textContent = 'group_id: ' + (groupId ?? '—');
+      if (appPill) appPill.textContent = 'app_id: ' + (appId ?? '—');
+      if (vkPill) vkPill.textContent = 'vk_platform: ' + (lp.vk_platform ?? '—');
     }
 
     function buildProfileUrl(vkValue) {
@@ -77,15 +80,14 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         const placeCell = { text: String(r.place || ''), align: 'center' };
 
         const url = buildProfileUrl(r.vk);
-        const playerCell = url
-          ? { text: r.nick, url: url }
-          : { text: r.nick };
+        const playerCell = url ? { text: r.nick, url } : { text: r.nick };
 
         const rtCell = { text: String(r.rt || ''), align: 'center' };
 
         return [placeCell, playerCell, rtCell];
       });
 
+      // Без more/more_url -> кнопки "Открыть" не будет
       return {
         title: 'Турнирная таблица',
         head,
@@ -97,38 +99,102 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       return 'return ' + JSON.stringify(widgetObj) + ';';
     }
 
-    function gvizUrl() {
-      // Для опубликованных таблиц работает /d/e/<PUB_ID>/gviz/tq
+    function csvUrl() {
       return (
         'https://docs.google.com/spreadsheets/d/e/' + encodeURIComponent(PUB_ID) +
-        '/gviz/tq?tqx=out:json&gid=' + encodeURIComponent(String(SHEET_GID)) +
-        '&t=' + Date.now()
+        '/pub?gid=' + encodeURIComponent(String(SHEET_GID)) +
+        '&single=true&output=csv&t=' + Date.now()
       );
     }
 
-    function parseGviz(text) {
-      // Ответ вида: google.visualization.Query.setResponse({...});
-      const m = text.match(/google\.visualization\.Query\.setResponse\((.*)\);\s*$/s);
-      if (!m || !m[1]) throw new Error("Не смог распарсить ответ gviz.");
-      return JSON.parse(m[1]);
+    // Надёжный CSV парсер (кавычки, запятые, переносы строк)
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let cur = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+
+        if (inQuotes) {
+          if (ch === '"') {
+            const next = text[i + 1];
+            if (next === '"') {
+              cur += '"';
+              i++;
+            } else {
+              inQuotes = false;
+            }
+          } else {
+            cur += ch;
+          }
+          continue;
+        }
+
+        if (ch === '"') {
+          inQuotes = true;
+          continue;
+        }
+
+        if (ch === ',') {
+          row.push(cur);
+          cur = '';
+          continue;
+        }
+
+        if (ch === '\n') {
+          row.push(cur);
+          rows.push(row);
+          row = [];
+          cur = '';
+          continue;
+        }
+
+        if (ch === '\r') continue;
+
+        cur += ch;
+      }
+
+      row.push(cur);
+      rows.push(row);
+
+      // убираем пустую последнюю строку, если она появилась
+      if (rows.length) {
+        const last = rows[rows.length - 1];
+        if (last.length === 1 && last[0] === '') rows.pop();
+      }
+
+      return rows;
+    }
+
+    // Опционально: если первая строка — заголовки (Nick/VK/RT), пропускаем её
+    function looksLikeHeader(row) {
+      const a = (row?.[0] ?? '').toString().trim().toLowerCase();
+      const b = (row?.[1] ?? '').toString().trim().toLowerCase();
+      const c = (row?.[2] ?? '').toString().trim().toLowerCase();
+      return (
+        (a.includes('nick') || a.includes('ник')) &&
+        (b === 'vk' || b.includes('vk') || b.includes('ссылка')) &&
+        (c.includes('rt') || c.includes('бал'))
+      );
     }
 
     async function loadData() {
-      const resp = await fetch(gvizUrl(), { cache: "no-store" });
-      if (!resp.ok) throw new Error("Не удалось загрузить таблицу. HTTP " + resp.status);
+      const resp = await fetch(csvUrl(), { cache: "no-store" });
+      if (!resp.ok) throw new Error("Не удалось загрузить CSV. HTTP " + resp.status);
 
-      const text = await resp.text();
-      const payload = parseGviz(text);
+      const csvText = await resp.text();
+      const table = parseCsv(csvText);
 
-      const rows = payload?.table?.rows || [];
+      let startIndex = 0;
+      if (table.length && looksLikeHeader(table[0])) startIndex = 1;
+
       const parsed = [];
-
-      // Ожидаем: A=Nick, B=VK, C=RT
-      for (let i = 0; i < rows.length && parsed.length < LIMIT; i++) {
-        const c = rows[i]?.c || [];
-        const nick = (c[0]?.v ?? "").toString().trim();
-        const vk = (c[1]?.v ?? "").toString().trim();
-        const rt = (c[2]?.v ?? "").toString().trim();
+      for (let i = startIndex; i < table.length && parsed.length < LIMIT; i++) {
+        const nick = (table[i][0] ?? '').toString().trim();
+        const vk = (table[i][1] ?? '').toString().trim();
+        const rt = (table[i][2] ?? '').toString().trim();
 
         if (!nick) continue;
 
@@ -140,13 +206,15 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         });
       }
 
-      if (parsed.length === 0) throw new Error("В таблице нет данных (проверь колонки A/B/C).");
+      if (parsed.length === 0) {
+        throw new Error("В таблице нет данных. Ожидаю колонки: A=Nick, B=VK, C=RT.");
+      }
 
       loaded = parsed;
 
-      dataView.textContent = JSON.stringify({ rows: loaded }, null, 2);
+      if (dataView) dataView.textContent = JSON.stringify({ rows: loaded }, null, 2);
       const widget = buildWidgetObject(loaded);
-      codeView.textContent = buildCode(widget);
+      if (codeView) codeView.textContent = buildCode(widget);
     }
 
     async function updateWidget() {
@@ -183,7 +251,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       parseLaunchParams();
       await bridge.send('VKWebAppInit');
 
-      btnAuth.addEventListener('click', async () => {
+      btnAuth?.addEventListener('click', async () => {
         try {
           if (!groupId || !appId) {
             setBad("Открой мини-приложение из группы (как админ), чтобы появился group_id.");
@@ -203,7 +271,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         }
       });
 
-      btnLoad.addEventListener('click', async () => {
+      btnLoad?.addEventListener('click', async () => {
         try {
           await loadData();
           setOk("Данные загружены ✅");
@@ -212,7 +280,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         }
       });
 
-      btnPreview.addEventListener('click', async () => {
+      btnPreview?.addEventListener('click', async () => {
         try {
           await previewWidget();
           setOk("Предпросмотр открыт ✅");
@@ -221,7 +289,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         }
       });
 
-      btnUpdate.addEventListener('click', async () => {
+      btnUpdate?.addEventListener('click', async () => {
         try {
           await loadData();
           await updateWidget();
