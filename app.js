@@ -89,7 +89,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
       // Без more/more_url -> кнопки "Открыть" не будет
       return {
-        title: 'Турнирная таблица',
+        title: 'Итоговая таблица RT',
         head,
         body
       };
