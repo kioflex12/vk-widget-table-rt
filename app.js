@@ -16,6 +16,8 @@
   const state = document.getElementById('state');
   const dataView = document.getElementById('dataView');
   const codeView = document.getElementById('codeView');
+  const APPS_SCRIPT_URL =    'https://script.google.com/macros/s/AKfycbwGkvaoitoposwY5fRuRgtsAixIbL5fBkpKdxARs33Nbcj9KOuYrkNjAM2-jXWkNhfy/exec';
+  const SHEET_NAME = 'RT';
 
   let groupId = null;
   let appId = null;
@@ -199,8 +201,8 @@
   }
 
   async function loadDataFromAppsScript() {
-    const base = scriptUrlInput.value.trim();
-    const sheet = (sheetNameInput.value.trim() || 'RT');
+    const base = APPS_SCRIPT_URL;
+    const sheet = SHEET_NAME;
 
     if (!base.startsWith('https://')) {
       throw new Error('Apps Script URL должен начинаться с https://');
