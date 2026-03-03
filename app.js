@@ -5,9 +5,6 @@
   const appPill = document.getElementById('appPill');
   const vkPill = document.getElementById('vkPill');
 
-  const scriptUrlInput = document.getElementById('scriptUrl');
-  const sheetNameInput = document.getElementById('sheetName');
-
   const btnAuth = document.getElementById('btnAuth');
   const btnLoad = document.getElementById('btnLoad');
   const btnPreview = document.getElementById('btnPreview');
@@ -16,8 +13,13 @@
   const state = document.getElementById('state');
   const dataView = document.getElementById('dataView');
   const codeView = document.getElementById('codeView');
-  const APPS_SCRIPT_URL =    'https://script.google.com/macros/s/AKfycbwGkvaoitoposwY5fRuRgtsAixIbL5fBkpKdxARs33Nbcj9KOuYrkNjAM2-jXWkNhfy/exec';
+
+  // ====== ХАРДКОД КОНФИГА ======
+  const APPS_SCRIPT_URL =
+    'https://script.google.com/macros/s/AKfycbwGkvaoitoposwY5fRuRgtsAixIbL5fBkpKdxARs33Nbcj9KOuYrkNjAM2-jXWkNhfy/exec';
   const SHEET_NAME = 'RT';
+  const LIMIT = 10;
+  // =============================
 
   let groupId = null;
   let appId = null;
@@ -38,14 +40,6 @@
     vkPill.textContent = 'vk_platform: ' + (lp.vk_platform ?? '—');
   }
 
-  function setStateOk(text) {
-    state.innerHTML = '<span class="ok">' + escapeHtml(text) + '</span>';
-  }
-
-  function setStateBad(text) {
-    state.innerHTML = '<span class="bad">' + escapeHtml(text) + '</span>';
-  }
-
   function escapeHtml(s) {
     return String(s)
       .replaceAll('&', '&amp;')
@@ -55,6 +49,15 @@
       .replaceAll("'", '&#39;');
   }
 
+  function setStateOk(text) {
+    state.innerHTML = '<span class="ok">' + escapeHtml(text) + '</span>';
+  }
+
+  function setStateBad(text) {
+    state.innerHTML = '<span class="bad">' + escapeHtml(text) + '</span>';
+  }
+
+  // JSONP чтобы обойти 302/CORS в VK WebView
   function jsonp(url) {
     return new Promise((resolve, reject) => {
       const cbName = '__vk_jsonp_cb_' + Math.random().toString(36).slice(2);
@@ -86,7 +89,6 @@
         cleanup();
         reject(new Error('JSONP load error'));
       };
-
       document.head.appendChild(script);
     });
   }
@@ -164,7 +166,7 @@
       { text: 'RT', align: 'center' }
     ];
 
-    const body = rows.slice(0, 10).map(r => {
+    const body = rows.slice(0, LIMIT).map(r => {
       const placeCell = { text: String(r.place || ''), align: 'center' };
 
       let url = null;
@@ -188,7 +190,6 @@
       return [placeCell, playerCell, rtCell];
     });
 
-    // Кнопки "Открыть" НЕ будет, потому что нет more/more_url
     return {
       title: 'Турнирная таблица',
       head,
@@ -201,16 +202,10 @@
   }
 
   async function loadDataFromAppsScript() {
-    const base = APPS_SCRIPT_URL;
-    const sheet = SHEET_NAME;
+    const url = APPS_SCRIPT_URL +
+      '?sheet=' + encodeURIComponent(SHEET_NAME) +
+      '&limit=' + encodeURIComponent(String(LIMIT));
 
-    if (!base.startsWith('https://')) {
-      throw new Error('Apps Script URL должен начинаться с https://');
-    }
-
-    const url = base + '?sheet=' + encodeURIComponent(sheet) + '&limit=10';
-
-    // Apps Script -> JSONP (в обход 302/CORS)
     const json = await jsonp(url);
 
     if (!json || !Array.isArray(json.rows)) {
@@ -225,7 +220,7 @@
     })).filter(x => x.nick.length > 0);
 
     if (rows.length === 0) {
-      throw new Error('В таблице нет данных (проверь лист и заполнение).');
+      throw new Error('В таблице нет данных (проверь лист RT и колонки).');
     }
 
     loaded = await normalizeRowsWithResolvedIds(rows);
@@ -237,12 +232,8 @@
   }
 
   async function updateWidget() {
-    if (!communityToken) {
-      throw new Error('Сначала получи токен (кнопка 1).');
-    }
-    if (!loaded) {
-      await loadDataFromAppsScript();
-    }
+    if (!communityToken) throw new Error('Сначала получи токен (кнопка 1).');
+    if (!loaded) await loadDataFromAppsScript();
 
     const widget = buildWidgetObject(loaded);
     const code = buildCode(widget);
@@ -260,15 +251,11 @@
     });
 
     const out = await resp.json();
-    if (out.error) {
-      throw new Error('VK API error: ' + JSON.stringify(out.error));
-    }
+    if (out.error) throw new Error('VK API error: ' + JSON.stringify(out.error));
   }
 
   async function previewWidget() {
-    if (!loaded) {
-      await loadDataFromAppsScript();
-    }
+    if (!loaded) await loadDataFromAppsScript();
     const widget = buildWidgetObject(loaded);
     const code = buildCode(widget);
     await bridge.send('VKWebAppShowAppWidgetPreviewBox', { type: 'table', code });
@@ -284,7 +271,6 @@
         setStateBad('Открой мини-приложение из сообщества (как админ), чтобы появился group_id.');
         return;
       }
-
       try {
         const res = await bridge.send('VKWebAppGetCommunityAuthToken', {
           app_id: appId,
