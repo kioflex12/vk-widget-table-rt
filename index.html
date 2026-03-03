@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>VK Widget Table (10 rows)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; padding: 16px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    textarea { width: 100%; min-height: 260px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    button { padding: 10px 12px; border-radius: 10px; border: 0; cursor: pointer; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .muted { color: #6b7280; font-size: 12px; }
+    .ok { color: #065f46; }
+    .bad { color: #7f1d1d; }
+    input { padding: 8px 10px; border-radius: 10px; border: 1px solid #e5e7eb; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f3f4f6; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Виджет-таблица для сообщества (10 строк)</h2>
+
+  <div class="card">
+    <div class="row">
+      <div class="pill" id="groupPill">group_id: —</div>
+      <div class="pill" id="appPill">app_id: —</div>
+      <div class="pill" id="vkPill">vk_platform: —</div>
+    </div>
+    <p class="muted">
+      Открой это мини-приложение именно из сообщества (как админ), тогда появится group_id и можно будет запросить токен.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="btnAuth">1) Получить токен сообщества (app_widget)</button>
+      <span class="muted" id="authState">Токен: нет</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Данные таблицы (10 строк)</h3>
+    <p class="muted">
+      ВАЖНО: ссылки лучше делать внутренними (vk.com / vk.me), иначе ВК может не принять виджет.
+    </p>
+    <textarea id="dataBox"></textarea>
+    <div class="row" style="margin-top:10px;">
+      <button id="btnPreview">2) Предпросмотр и установка (через окно ВК)</button>
+      <button id="btnUpdate">3) Обновить виджет напрямую (через VK API)</button>
+      <span class="muted" id="updateState"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Параметры виджета</h3>
+    <div class="row">
+      <label class="muted">Заголовок:</label>
+      <input id="titleInput" value="Топ-10" />
+      <label class="muted">Ссылка заголовка:</label>
+      <input id="titleUrlInput" value="https://vk.com" />
+      <label class="muted">Текст кнопки “ещё”:</label>
+      <input id="moreInput" value="Смотреть всё" />
+      <label class="muted">Ссылка “ещё”:</label>
+      <input id="moreUrlInput" value="https://vk.com" />
+    </div>
+    <p class="muted">
+      Таблица: 2 колонки. В первой можно ставить icon_id, но можно и без иконок.
+    </p>
+  </div>
+
+  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+  <script>
+    (function () {
+      const bridge = window.vkBridge;
+
+      const groupPill = document.getElementById('groupPill');
+      const appPill = document.getElementById('appPill');
+      const vkPill = document.getElementById('vkPill');
+
+      const btnAuth = document.getElementById('btnAuth');
+      const authState = document.getElementById('authState');
+
+      const dataBox = document.getElementById('dataBox');
+      const btnPreview = document.getElementById('btnPreview');
+      const btnUpdate = document.getElementById('btnUpdate');
+      const updateState = document.getElementById('updateState');
+
+      const titleInput = document.getElementById('titleInput');
+      const titleUrlInput = document.getElementById('titleUrlInput');
+      const moreInput = document.getElementById('moreInput');
+      const moreUrlInput = document.getElementById('moreUrlInput');
+
+      let launchParams = null;
+      let groupId = null;
+      let appId = null;
+      let communityToken = null;
+
+      function parseLaunchParams() {
+        const sp = new URLSearchParams(window.location.search);
+        // Обычно ВК передаёт vk_group_id, vk_app_id, vk_platform и т.д.
+        launchParams = Object.fromEntries(sp.entries());
+        groupId = launchParams.vk_group_id ? Number(launchParams.vk_group_id) : null;
+        appId = launchParams.vk_app_id ? Number(launchParams.vk_app_id) : null;
+
+        groupPill.textContent = 'group_id: ' + (groupId ?? '—');
+        appPill.textContent = 'app_id: ' + (appId ?? '—');
+        vkPill.textContent = 'vk_platform: ' + (launchParams.vk_platform ?? '—');
+      }
+
+      function defaultRows() {
+        // 10 строк по умолчанию
+        const rows = [];
+        for (let i = 1; i <= 10; i++) {
+          rows.push({
+            col1: 'Позиция ' + i,
+            col2: 'Описание ' + i,
+            url: 'https://vk.com'
+          });
+        }
+        return rows;
+      }
+
+      function fillDefaultData() {
+        dataBox.value = JSON.stringify(defaultRows(), null, 2);
+      }
+
+      function buildWidgetObject(rows) {
+        // Таблица 2 колонки. Формат виджета берём как в примерах appWidgets.update: head/body.
+        // icon_id можно добавлять только в первую ячейку строки, но мы делаем без иконок (самый беспроблемный вариант).
+        const head = [
+          { text: 'Название' },
+          { text: 'Детали', align: 'center' }
+        ];
+
+        const body = rows.map(r => ([
+          { text: String(r.col1 || '') },
+          { text: String(r.col2 || ''), url: String(r.url || 'https://vk.com') }
+        ]));
+
+        return {
+          title: String(titleInput.value || 'Топ-10'),
+          title_url: String(titleUrlInput.value || 'https://vk.com'),
+          more: String(moreInput.value || 'Смотреть всё'),
+          more_url: String(moreUrlInput.value || 'https://vk.com'),
+          head,
+          body
+        };
+      }
+
+      function buildWidgetCode(widgetObj) {
+        // appWidgets.update ждёт "code" как строку VKScript, которая возвращает JSON-объект виджета
+        return 'return ' + JSON.stringify(widgetObj) + ';';
+      }
+
+      async function init() {
+        parseLaunchParams();
+        fillDefaultData();
+
+        await bridge.send('VKWebAppInit');
+
+        btnAuth.addEventListener('click', async () => {
+          updateState.textContent = '';
+          if (!groupId || !appId) {
+            authState.innerHTML = '<span class="bad">Не вижу group_id/app_id. Открой мини-приложение из твоего сообщества (как админ).</span>';
+            return;
+          }
+
+          try {
+            // Запрашиваем токен сообщества с правом app_widget
+            const res = await bridge.send('VKWebAppGetCommunityAuthToken', {
+              app_id: appId,
+              group_id: groupId,
+              scope: 'app_widget'
+            });
+            communityToken = res.access_token;
+            authState.innerHTML = '<span class="ok">Токен получен ✅</span>';
+          } catch (e) {
+            authState.innerHTML = '<span class="bad">Ошибка получения токена: ' + (e && e.error_data ? JSON.stringify(e.error_data) : String(e)) + '</span>';
+          }
+        });
+
+        btnPreview.addEventListener('click', async () => {
+          updateState.textContent = '';
+          let rows;
+          try {
+            rows = JSON.parse(dataBox.value);
+            if (!Array.isArray(rows) || rows.length !== 10) throw new Error('Нужно ровно 10 строк (массив из 10 объектов).');
+          } catch (e) {
+            updateState.innerHTML = '<span class="bad">JSON некорректный: ' + String(e.message || e) + '</span>';
+            return;
+          }
+
+          const widgetObj = buildWidgetObject(rows);
+          const code = buildWidgetCode(widgetObj);
+
+          try {
+            // Окно предпросмотра/установки виджета (нативное окно ВК)
+            await bridge.send('VKWebAppShowAppWidgetPreviewBox', {
+              type: 'table',
+              code: code
+            });
+            updateState.innerHTML = '<span class="ok">Открыл предпросмотр. Если нажмёшь “Установить”, виджет появится в группе.</span>';
+          } catch (e) {
+            updateState.innerHTML = '<span class="bad">Не удалось открыть предпросмотр: ' + (e && e.error_data ? JSON.stringify(e.error_data) : String(e)) + '</span>';
+          }
+        });
+
+        btnUpdate.addEventListener('click', async () => {
+          updateState.textContent = '';
+          if (!communityToken) {
+            updateState.innerHTML = '<span class="bad">Сначала нажми “Получить токен сообщества”.</span>';
+            return;
+          }
+          let rows;
+          try {
+            rows = JSON.parse(dataBox.value);
+            if (!Array.isArray(rows) || rows.length !== 10) throw new Error('Нужно ровно 10 строк (массив из 10 объектов).');
+          } catch (e) {
+            updateState.innerHTML = '<span class="bad">JSON некорректный: ' + String(e.message || e) + '</span>';
+            return;
+          }
+
+          const widgetObj = buildWidgetObject(rows);
+          const code = buildWidgetCode(widgetObj);
+
+          try {
+            const form = new URLSearchParams();
+            form.set('v', '5.199');
+            form.set('access_token', communityToken);
+            form.set('type', 'table');
+            form.set('code', code);
+
+            const resp = await fetch('https://api.vk.com/method/appWidgets.update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+              body: form.toString()
+            });
+
+            const json = await resp.json();
+            if (json.error) {
+              updateState.innerHTML = '<span class="bad">VK API error: ' + JSON.stringify(json.error) + '</span>';
+            } else {
+              updateState.innerHTML = '<span class="ok">Виджет обновлён ✅ Ответ: ' + JSON.stringify(json.response) + '</span>';
+            }
+          } catch (e) {
+            updateState.innerHTML = '<span class="bad">Ошибка запроса: ' + String(e) + '</span>';
+          }
+        });
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
