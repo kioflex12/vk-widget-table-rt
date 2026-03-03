@@ -217,27 +217,40 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       if (codeView) codeView.textContent = buildCode(widget);
     }
 
+    let updating = false;
+
     async function updateWidget() {
-      if (!communityToken) throw new Error("Сначала получи токен (кнопка 1).");
-      if (!loaded) await loadData();
+      if (updating) return;
+      updating = true;
+      try {       
+        if (!communityToken) throw new Error("Сначала получи токен (кнопка 1).");
+        if (!loaded) await loadData();
 
-      const widget = buildWidgetObject(loaded);
-      const code = buildCode(widget);
+        const widget = buildWidgetObject(loaded);
+        const code = buildCode(widget);
 
-      const form = new URLSearchParams();
-      form.set('v', '5.199');
-      form.set('access_token', communityToken);
-      form.set('type', 'table');
-      form.set('code', code);
+        const form = new URLSearchParams();
+        form.set('v', '5.199');
+        form.set('access_token', communityToken);
+        form.set('type', 'table');
+        form.set('code', code);
 
-      const resp = await fetch('https://api.vk.com/method/appWidgets.update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: form.toString()
-      });
+        const resp = await fetch('https://api.vk.com/method/appWidgets.update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+          body: form.toString()
+        });
 
-      const out = await resp.json();
-      if (out.error) throw new Error('VK API error: ' + JSON.stringify(out.error));
+        const out = await resp.json();
+
+        if (out && out.error) {
+          throw new Error('VK API error: ' + JSON.stringify(out.error));
+        }
+
+        console.log("appWidgets.update response:", out);
+      } finally {
+        updating = false;
+      }
     }
 
     async function previewWidget() {
