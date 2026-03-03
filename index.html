@@ -3,19 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>RT Widget</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; padding: 16px; }
-    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    button { padding: 10px 12px; border-radius: 10px; border: 0; cursor: pointer; }
-    input { padding: 8px 10px; border-radius: 10px; border: 1px solid #e5e7eb; }
-    .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#f3f4f6; font-size:12px; }
-    .muted { color:#6b7280; font-size:12px; }
-    .ok { color:#065f46; }
-    .bad { color:#7f1d1d; }
-    pre { background:#0b1020; color:#e5e7eb; padding:12px; border-radius:12px; overflow:auto; }
-  </style>
+  <title>RT Виджет</title>
+  <link rel="stylesheet" href="./styles.css?v=20260303_1">
 </head>
 <body>
   <h2>RT: виджет из Google Sheets</h2>
@@ -25,19 +14,23 @@
       <div class="pill" id="groupPill">group_id: —</div>
       <div class="pill" id="appPill">app_id: —</div>
       <div class="pill" id="vkPill">vk_platform: —</div>
+      <div class="pill">build: 2026-03-03-rt</div>
     </div>
-    <p class="muted">Открывай это мини-приложение из сообщества (как админ), иначе не будет group_id.</p>
+    <p class="muted">Открывай мини-приложение из сообщества (как админ), иначе не будет group_id и токена.</p>
   </div>
 
   <div class="card">
     <div class="row">
-      <label class="muted">Apps Script URL:</label>
-      <input id="scriptUrl" style="min-width:320px; flex:1"
-        value="https://script.google.com/macros/s/ВАШ_РЕАЛЬНЫЙ_DEPLOY_ID/exec" />
-      <label class="muted">Лист:</label>
-      <input id="sheetName" style="width:90px" value="RT" />
+      <label class="muted" for="scriptUrl">Apps Script URL:</label>
+      <input id="scriptUrl" class="input flex"
+             value="https://script.google.com/macros/s/AKfycbwGkvaoitoposwY5fRuRgtsAixIbL5fBkpKdxARs33Nbcj9KOuYrkNjAM2-jXWkNhfy/exec" />
+      <label class="muted" for="sheetName">Лист:</label>
+      <input id="sheetName" class="input small" value="RT" />
     </div>
-    <p class="muted">Данные берутся из Nick/VK/RT. Место = позиция строки.</p>
+    <p class="muted">
+      Формат листа: A=Nick, B=VK (sava_svoi / https://vk.com/sava_svoi / id123 / 123), C=RT.
+      Место = порядок строк (строка 2 = №1).
+    </p>
   </div>
 
   <div class="card">
@@ -48,220 +41,15 @@
       <button id="btnUpdate">4) Обновить виджет</button>
       <span class="muted" id="state"></span>
     </div>
-    <h3 style="margin-top:12px;">JSON из таблицы</h3>
+
+    <h3 class="h3">JSON из таблицы</h3>
     <pre id="dataView">{}</pre>
-    <h3 style="margin-top:12px;">VK code</h3>
+
+    <h3 class="h3">VK code</h3>
     <pre id="codeView">—</pre>
   </div>
 
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-  <script>
-    (function () {
-      const bridge = window.vkBridge;
-
-      const groupPill = document.getElementById('groupPill');
-      const appPill = document.getElementById('appPill');
-      const vkPill = document.getElementById('vkPill');
-
-      const scriptUrlInput = document.getElementById('scriptUrl');
-      const sheetNameInput = document.getElementById('sheetName');
-
-      const btnAuth = document.getElementById('btnAuth');
-      const btnLoad = document.getElementById('btnLoad');
-      const btnPreview = document.getElementById('btnPreview');
-      const btnUpdate = document.getElementById('btnUpdate');
-
-      const state = document.getElementById('state');
-      const dataView = document.getElementById('dataView');
-      const codeView = document.getElementById('codeView');
-
-      let groupId = null;
-      let appId = null;
-      let communityToken = null;
-      let loaded = null;
-
-      function parseLaunchParams() {
-        const sp = new URLSearchParams(window.location.search);
-        const lp = Object.fromEntries(sp.entries());
-
-        groupId = lp.vk_group_id ? Number(lp.vk_group_id) : null;
-        appId = lp.vk_app_id ? Number(lp.vk_app_id) : null;
-
-        groupPill.textContent = 'group_id: ' + (groupId ?? '—');
-        appPill.textContent = 'app_id: ' + (appId ?? '—');
-        vkPill.textContent = 'vk_platform: ' + (lp.vk_platform ?? '—');
-      }
-
-      function extractVkUrlAndIcon(vkField) {
-        const s = (vkField || '').trim();
-        if (!s) return { url: null, icon_id: null };
-
-        // Числовой id
-        if (/^\d+$/.test(s)) {
-          return { url: 'https://vk.com/id' + s, icon_id: 'id' + s };
-        }
-
-        // URL /id123
-        const mId = s.match(/(?:vk\.com\/|\/)(id(\d+))(?:\b|\/|$)/i);
-        if (mId && mId[2]) {
-          return { url: 'https://vk.com/id' + mId[2], icon_id: 'id' + mId[2] };
-        }
-
-        // Если дали ссылку/ник не числовой — кликаем по ссылке, но иконку не ставим (нельзя получить без API)
-        if (s.startsWith('http://') || s.startsWith('https://')) {
-          return { url: s, icon_id: null };
-        }
-
-        // screen name (типа durov) — url можно, icon нет
-        return { url: 'https://vk.com/' + s, icon_id: null };
-      }
-
-      function buildWidgetObject(rows) {
-        // 3 колонки: Игрок (иконка+клик), RT, Место
-        const head = [
-          { text: 'Игрок' },
-          { text: 'RT', align: 'center' },
-          { text: 'Место', align: 'center' }
-        ];
-
-        const body = rows.slice(0, 10).map(r => {
-          const vk = extractVkUrlAndIcon(r.vk);
-          const firstCell = vk.icon_id
-            ? { text: r.nick, icon_id: vk.icon_id, url: vk.url || undefined }
-            : { text: r.nick, url: vk.url || undefined };
-
-          return [
-            firstCell,
-            { text: String(r.rt || ''), align: 'center' },
-            { text: String(r.place || ''), align: 'center' }
-          ];
-        });
-
-        return {
-          title: 'Турнирная таблица',
-          title_url: 'https://vk.com',
-          more: 'Открыть',
-          more_url: 'https://vk.com',
-          head,
-          body
-        };
-      }
-
-      function buildCode(widgetObj) {
-        return 'return ' + JSON.stringify(widgetObj) + ';';
-      }
-
-      async function loadData() {
-        const base = scriptUrlInput.value.trim();
-        const sheet = sheetNameInput.value.trim() || 'RT';
-        if (!base.startsWith('https://')) throw new Error('Apps Script URL должен начинаться с https://');
-
-        const url = base + '?sheet=' + encodeURIComponent(sheet) + '&limit=10&t=' + Date.now();
-        const resp = await fetch(url, { cache: 'no-store' });
-        if (!resp.ok) throw new Error('Не удалось загрузить JSON. HTTP ' + resp.status);
-
-        const json = await resp.json();
-        if (!json || !Array.isArray(json.rows)) throw new Error('Неверный формат ответа Apps Script.');
-        if (json.rows.length === 0) throw new Error('В таблице нет данных.');
-
-        // Нормализуем
-        loaded = json.rows.map(x => ({
-          place: String(x.place || '').trim(),
-          nick: String(x.nick || '').trim(),
-          vk: String(x.vk || '').trim(),
-          rt: String(x.rt || '').trim()
-        })).filter(x => x.nick);
-
-        dataView.textContent = JSON.stringify({ rows: loaded }, null, 2);
-
-        const widget = buildWidgetObject(loaded);
-        codeView.textContent = buildCode(widget);
-
-        return loaded;
-      }
-
-      async function updateWidget() {
-        if (!communityToken) throw new Error('Сначала получи токен.');
-        if (!loaded) await loadData();
-
-        const widget = buildWidgetObject(loaded);
-        const code = buildCode(widget);
-
-        const form = new URLSearchParams();
-        form.set('v', '5.199');
-        form.set('access_token', communityToken);
-        form.set('type', 'table');
-        form.set('code', code);
-
-        const resp = await fetch('https://api.vk.com/method/appWidgets.update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-          body: form.toString()
-        });
-        const json = await resp.json();
-        if (json.error) throw new Error('VK API error: ' + JSON.stringify(json.error));
-      }
-
-      async function init() {
-        parseLaunchParams();
-        await bridge.send('VKWebAppInit');
-
-        btnAuth.addEventListener('click', async () => {
-          state.textContent = '';
-          if (!groupId || !appId) {
-            state.innerHTML = '<span class="bad">Открой мини-приложение из сообщества (как админ), чтобы появился group_id.</span>';
-            return;
-          }
-          try {
-            const res = await bridge.send('VKWebAppGetCommunityAuthToken', {
-              app_id: appId,
-              group_id: groupId,
-              scope: 'app_widget'
-            });
-            communityToken = res.access_token;
-            state.innerHTML = '<span class="ok">Токен получен ✅</span>';
-          } catch (e) {
-            state.innerHTML = '<span class="bad">Ошибка токена: ' + (e && e.error_data ? JSON.stringify(e.error_data) : String(e)) + '</span>';
-          }
-        });
-
-        btnLoad.addEventListener('click', async () => {
-          state.textContent = '';
-          try {
-            await loadData();
-            state.innerHTML = '<span class="ok">Данные загружены ✅</span>';
-          } catch (e) {
-            state.innerHTML = '<span class="bad">' + String(e.message || e) + '</span>';
-          }
-        });
-
-        btnPreview.addEventListener('click', async () => {
-          state.textContent = '';
-          try {
-            if (!loaded) await loadData();
-            const widget = buildWidgetObject(loaded);
-            const code = buildCode(widget);
-            await bridge.send('VKWebAppShowAppWidgetPreviewBox', { type: 'table', code });
-            state.innerHTML = '<span class="ok">Предпросмотр открыт ✅</span>';
-          } catch (e) {
-            state.innerHTML = '<span class="bad">' + String(e.message || e) + '</span>';
-          }
-        });
-
-        btnUpdate.addEventListener('click', async () => {
-          state.textContent = '';
-          try {
-            await loadData();
-            await updateWidget();
-            state.innerHTML = '<span class="ok">Виджет обновлён ✅</span>';
-          } catch (e) {
-            state.innerHTML = '<span class="bad">' + String(e.message || e) + '</span>';
-          }
-        });
-      }
-
-      init();
-    })();
-  </script>
+  <script src="./app.js?v=20260303_1"></script>
 </body>
 </html>
