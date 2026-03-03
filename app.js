@@ -1,6 +1,9 @@
 (() => {
   const bridge = window.vkBridge;
 
+  const SHEETS_ID = "2PACX-1vRWC87JHjXGFuyoDwB3iyJLPkzExdiwRwxZu2SKpHv-G1t3oeGE4Kxu35ne0PgJbHWxqaVGq-28kfRE";
+  const SHEET_GID = "0";
+  const LIMIT = 10;
   const groupPill = document.getElementById('groupPill');
   const appPill = document.getElementById('appPill');
   const vkPill = document.getElementById('vkPill');
@@ -86,35 +89,43 @@
 
   async function loadData() {
     const url =
-      APPS_SCRIPT_URL +
-      '?sheet=' + encodeURIComponent(SHEET_NAME) +
-      '&limit=' + encodeURIComponent(String(LIMIT)) +
-      '&t=' + Date.now();
+      `https://docs.google.com/spreadsheets/d/${encodeURIComponent(SHEETS_ID)}/gviz/tq` +
+      `?tqx=out:json&gid=${encodeURIComponent(String(SHEET_GID))}` +
+      `&t=${Date.now()}`;
 
     const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error("Не удалось загрузить таблицу. HTTP " + resp.status);
 
-    if (!resp.ok) {
-      throw new Error("HTTP error: " + resp.status);
+    const text = await resp.text();
+
+    // gviz возвращает не чистый JSON, а обёртку. Вытаскиваем объект:
+    const match = text.match(/google\\.visualization\\.Query\\.setResponse\\((.*)\\);?\\s*$/s);
+    if (!match || !match[1]) throw new Error("Не смог распарсить ответ gviz.");
+
+    const payload = JSON.parse(match[1]);
+
+    const rows = payload?.table?.rows || [];
+    // Ожидаем колонки: Nick | VK | RT
+    const parsed = [];
+    for (let i = 0; i < rows.length && parsed.length < LIMIT; i++) {
+      const c = rows[i].c || [];
+      const nick = (c[0]?.v ?? "").toString().trim();
+      const vk = (c[1]?.v ?? "").toString().trim();
+      const rt = (c[2]?.v ?? "").toString().trim();
+
+      if (!nick) continue;
+
+      parsed.push({
+        place: String(parsed.length + 1),
+        nick,
+        vk,
+        rt
+      });
     }
 
-    const json = await resp.json();
+    if (parsed.length === 0) throw new Error("В таблице нет данных.");
 
-    if (!json || !Array.isArray(json.rows)) {
-      throw new Error("Неверный формат ответа Apps Script");
-    }
-
-    const rows = json.rows.map((x, idx) => ({
-      place: String(x.place || (idx + 1)),
-      nick: String(x.nick || '').trim(),
-      vk: String(x.vk || '').trim(),
-      rt: String(x.rt || '').trim()
-    })).filter(x => x.nick.length > 0);
-
-    if (rows.length === 0) {
-      throw new Error("В таблице нет данных");
-    }
-
-    loaded = rows;
+    loaded = parsed;
 
     dataView.textContent = JSON.stringify({ rows: loaded }, null, 2);
 
