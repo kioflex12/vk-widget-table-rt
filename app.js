@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.2';
+    const VERSION = '1.0.3';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
