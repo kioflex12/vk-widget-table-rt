@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.0';
+    const VERSION = '1.0.1';
     const bridge = window.vkBridge;
 
     const groupPill = document.getElementById('groupPill');
@@ -27,7 +27,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     // https://docs.google.com/spreadsheets/d/e/<PUB_ID>/pubhtml?gid=0&single=true
     const PUB_ID = "2PACX-1vRWC87JHjXGFuyoDwB3iyJLPkzExdiwRwxZu2SKpHv-G1t3oeGE4Kxu35ne0PgJbHWxqaVGq-28kfRE";
     const SHEET_GID = 0;
-    const LIMIT = 10;
+    const LIMIT = 15;
 
     let groupId = null;
     let appId = null;
