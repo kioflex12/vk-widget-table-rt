@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.3';
+    const VERSION = '1.0.4';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -353,10 +353,13 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       parseLaunchParams();
       if (versionPill) versionPill.textContent = 'v' + VERSION;
 
-      try {
-        await bridge.send('VKWebAppInit');
-      } catch (e) {
-        console.warn('VKWebAppInit failed:', e);
+      // VKWebAppInit обязателен для мобильного приложения ВК
+      if (bridge) {
+        try {
+          await bridge.send('VKWebAppInit');
+        } catch (e) {
+          console.warn('VKWebAppInit failed:', e);
+        }
       }
 
       // Режим: если есть group_id — админ-панель, иначе — публичная таблица
@@ -409,6 +412,6 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       });
     }
 
-    init();
+    init().catch(e => console.error('init error:', e));
   })();
 }
