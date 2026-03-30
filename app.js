@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.1';
+    const VERSION = '1.0.2';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -352,7 +352,12 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     async function init() {
       parseLaunchParams();
       if (versionPill) versionPill.textContent = 'v' + VERSION;
-      await bridge.send('VKWebAppInit');
+
+      try {
+        await bridge.send('VKWebAppInit');
+      } catch (e) {
+        console.warn('VKWebAppInit failed:', e);
+      }
 
       // Режим: если есть group_id — админ-панель, иначе — публичная таблица
       if (groupId) {
