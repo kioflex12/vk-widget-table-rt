@@ -72,10 +72,19 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       if (vkPill) vkPill.textContent = 'vk_platform: ' + (lp.vk_platform ?? '—');
     }
 
+    const VK_DOMAINS = ['vk.com', 'vk.ru', 'vkontakte.ru', 'vkvideo.ru', 'vk.me', 'vk.cc', 'vk.link'];
+
+    function isVkUrl(url) {
+      try {
+        const host = new URL(url).hostname.replace(/^www\./, '');
+        return VK_DOMAINS.includes(host);
+      } catch { return false; }
+    }
+
     function buildProfileUrl(vkValue) {
       const s = (vkValue || '').trim();
       if (!s) return null;
-      if (s.startsWith('http://') || s.startsWith('https://')) return s;
+      if (s.startsWith('http://') || s.startsWith('https://')) return isVkUrl(s) ? s : null;
       return 'https://vk.com/' + s;
     }
 
