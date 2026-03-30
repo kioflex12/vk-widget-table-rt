@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.4';
+    const VERSION = '1.0.5';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -364,9 +364,9 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
       // Режим: если есть group_id — админ-панель, иначе — публичная таблица
       if (groupId) {
+        publicView.style.display = 'none';
         adminView.style.display = '';
       } else {
-        publicView.style.display = '';
         loadPublicView();
         return;
       }
