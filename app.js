@@ -222,26 +222,22 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     async function updateWidget() {
       if (updating) return;
       updating = true;
-      try {       
+      try {
         if (!communityToken) throw new Error("Сначала получи токен (кнопка 1).");
         if (!loaded) await loadData();
 
         const widget = buildWidgetObject(loaded);
         const code = buildCode(widget);
 
-        const form = new URLSearchParams();
-        form.set('v', '5.199');
-        form.set('access_token', communityToken);
-        form.set('type', 'table');
-        form.set('code', code);
-
-        const resp = await fetch('https://api.vk.com/method/appWidgets.update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-          body: form.toString()
+        const out = await bridge.send('VKWebAppCallAPIMethod', {
+          method: 'appWidgets.update',
+          params: {
+            v: '5.199',
+            access_token: communityToken,
+            type: 'table',
+            code: code
+          }
         });
-
-        const out = await resp.json();
 
         if (out && out.error) {
           throw new Error('VK API error: ' + JSON.stringify(out.error));
