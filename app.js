@@ -42,6 +42,16 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         .replaceAll("'", '&#39;');
     }
 
+    function extractError(e) {
+      if (e && e.message) return e.message;
+      if (e && e.error_data) {
+        const d = e.error_data;
+        return d.error_msg || d.error_reason || JSON.stringify(d);
+      }
+      if (typeof e === 'object') return JSON.stringify(e);
+      return String(e);
+    }
+
     function setOk(text) {
       state.innerHTML = '<span class="ok">' + escapeHtml(text) + '</span>';
     }
@@ -285,7 +295,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
           await loadData();
           setOk("Данные загружены ✅");
         } catch (e) {
-          setBad(String(e.message || e));
+          setBad(extractError(e));
         }
       });
 
@@ -294,7 +304,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
           await previewWidget();
           setOk("Предпросмотр открыт ✅");
         } catch (e) {
-          setBad(String(e.message || e));
+          setBad(extractError(e));
         }
       });
 
@@ -304,7 +314,8 @@ if (window.__RT_WIDGET_APP_LOADED__) {
           await updateWidget();
           setOk("Виджет обновлён ✅");
         } catch (e) {
-          setBad(String(e.message || e));
+          console.error("updateWidget error:", e);
+          setBad(extractError(e));
         }
       });
     }
