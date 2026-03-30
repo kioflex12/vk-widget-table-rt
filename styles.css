@@ -71,3 +71,102 @@ pre {
 .h3 {
   margin-top: 12px;
 }
+
+/* === Публичная таблица рейтинга === */
+
+.public-title {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.public-loading {
+  text-align: center;
+  color: #6b7280;
+  padding: 32px 0;
+}
+
+.public-error {
+  text-align: center;
+  color: #7f1d1d;
+  padding: 16px;
+}
+
+.rt-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.rt-table thead {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+.rt-table th {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rt-table td {
+  padding: 10px 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.rt-table tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+.rt-table tbody tr:hover {
+  background: #eef2ff;
+}
+
+/* Топ-3 подсветка */
+.rt-table tbody tr.place-1 { background: linear-gradient(90deg, #fef9c3 0%, #fff 60%); }
+.rt-table tbody tr.place-2 { background: linear-gradient(90deg, #e5e7eb 0%, #fff 60%); }
+.rt-table tbody tr.place-3 { background: linear-gradient(90deg, #fed7aa 0%, #fff 60%); }
+
+.rt-table tbody tr.place-1:hover,
+.rt-table tbody tr.place-2:hover,
+.rt-table tbody tr.place-3:hover {
+  filter: brightness(0.97);
+}
+
+.col-place {
+  width: 50px;
+  text-align: center;
+}
+
+.col-rt {
+  width: 80px;
+  text-align: center;
+}
+
+.rt-table td.col-place {
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.rt-table td.col-rt {
+  text-align: center;
+  font-weight: 600;
+}
+
+.rt-table a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.rt-table a:hover {
+  text-decoration: underline;
+}
+
+.place-medal {
+  font-size: 18px;
+}

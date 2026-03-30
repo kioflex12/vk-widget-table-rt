@@ -7,31 +7,47 @@
   <link rel="stylesheet" href="./styles.css?v=20260303_888">
 </head>
 <body>
-  <h2>RT: виджет из Google Sheets</h2>
-
-  <div class="card">
-    <div class="row">
-      <div class="pill" id="groupPill">group_id: —</div>
-      <div class="pill" id="appPill">app_id: —</div>
-      <div class="pill" id="vkPill">vk_platform: —</div>
-      <div class="pill" id="versionPill">v—</div>
-    </div>
-    <p class="muted">Открывай мини-приложение из сообщества (как админ), иначе не будет group_id и токена.</p>
+  <!-- === Публичная таблица (для обычных пользователей) === -->
+  <div id="publicView" style="display:none">
+    <h2 class="public-title">Итоговая таблица RT</h2>
+    <div id="publicLoading" class="public-loading">Загрузка данных...</div>
+    <div id="publicError" class="public-error" style="display:none"></div>
+    <table id="publicTable" class="rt-table" style="display:none">
+      <thead>
+        <tr><th class="col-place">№</th><th class="col-player">Игрок</th><th class="col-rt">RT</th></tr>
+      </thead>
+      <tbody id="publicBody"></tbody>
+    </table>
   </div>
 
-  <div class="card">
-    <div class="row">
-      <button id="btnAuth">1) Получить токен (app_widget)</button>
-      <button id="btnLoad">2) Загрузить данные</button>
-      <button id="btnUpdate">3) Обновить виджет</button>
-      <span class="muted" id="state"></span>
+  <!-- === Админ-панель (для админов группы) === -->
+  <div id="adminView" style="display:none">
+    <h2>RT: виджет из Google Sheets</h2>
+
+    <div class="card">
+      <div class="row">
+        <div class="pill" id="groupPill">group_id: —</div>
+        <div class="pill" id="appPill">app_id: —</div>
+        <div class="pill" id="vkPill">vk_platform: —</div>
+        <div class="pill" id="versionPill">v—</div>
+      </div>
+      <p class="muted">Открывай мини-приложение из сообщества (как админ), иначе не будет group_id и токена.</p>
     </div>
 
-    <h3 class="h3">JSON из таблицы</h3>
-    <pre id="dataView">{}</pre>
+    <div class="card">
+      <div class="row">
+        <button id="btnAuth">1) Получить токен (app_widget)</button>
+        <button id="btnLoad">2) Загрузить данные</button>
+        <button id="btnUpdate">3) Обновить виджет</button>
+        <span class="muted" id="state"></span>
+      </div>
 
-    <h3 class="h3">VK code</h3>
-    <pre id="codeView">—</pre>
+      <h3 class="h3">JSON из таблицы</h3>
+      <pre id="dataView">{}</pre>
+
+      <h3 class="h3">VK code</h3>
+      <pre id="codeView">—</pre>
+    </div>
   </div>
 
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>

@@ -7,8 +7,16 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.0';
+    const VERSION = '1.0.1';
     const bridge = window.vkBridge;
+
+    // Режимы: публичная таблица / админ-панель
+    const publicView = document.getElementById('publicView');
+    const adminView = document.getElementById('adminView');
+    const publicBody = document.getElementById('publicBody');
+    const publicTable = document.getElementById('publicTable');
+    const publicLoading = document.getElementById('publicLoading');
+    const publicError = document.getElementById('publicError');
 
     const groupPill = document.getElementById('groupPill');
     const appPill = document.getElementById('appPill');
@@ -111,12 +119,19 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         return [placeCell, playerCell, rtCell];
       });
 
-      // Без more/more_url -> кнопки "Открыть" не будет
-      return {
+      const widget = {
         title: 'Итоговая таблица RT',
         head,
         body
       };
+
+      // Кнопка "Показать всё" -> открывает мини-приложение с полной таблицей
+      if (appId) {
+        widget.more = 'Показать всё';
+        widget.more_url = 'https://vk.com/app' + appId;
+      }
+
+      return widget;
     }
 
     function buildCode(widgetObj) {
@@ -204,18 +219,14 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       );
     }
 
-    async function loadData() {
-      const resp = await fetch(csvUrl(), { cache: "no-store" });
-      if (!resp.ok) throw new Error("Не удалось загрузить CSV. HTTP " + resp.status);
-
-      const csvText = await resp.text();
-      const table = parseCsv(csvText);
-
+    function parseRows(table, limit) {
       let startIndex = 0;
       if (table.length && looksLikeHeader(table[0])) startIndex = 1;
 
       const parsed = [];
-      for (let i = startIndex; i < table.length && parsed.length < LIMIT; i++) {
+      for (let i = startIndex; i < table.length; i++) {
+        if (limit && parsed.length >= limit) break;
+
         const nick = (table[i][0] ?? '').toString().trim();
         const vk = (table[i][1] ?? '').toString().trim();
         const rt = (table[i][2] ?? '').toString().trim();
@@ -230,6 +241,19 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         });
       }
 
+      return parsed;
+    }
+
+    async function fetchCsv() {
+      const resp = await fetch(csvUrl(), { cache: "no-store" });
+      if (!resp.ok) throw new Error("Не удалось загрузить CSV. HTTP " + resp.status);
+      return parseCsv(await resp.text());
+    }
+
+    async function loadData() {
+      const table = await fetchCsv();
+      const parsed = parseRows(table, LIMIT);
+
       if (parsed.length === 0) {
         throw new Error("В таблице нет данных. Ожидаю колонки: A=Nick, B=VK, C=RT.");
       }
@@ -239,6 +263,58 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       if (dataView) dataView.textContent = JSON.stringify({ rows: loaded }, null, 2);
       const widget = buildWidgetObject(loaded);
       if (codeView) codeView.textContent = buildCode(widget);
+    }
+
+    const MEDALS = ['', '\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
+
+    function renderPublicTable(rows) {
+      publicBody.innerHTML = '';
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        const placeNum = Number(r.place);
+        if (placeNum >= 1 && placeNum <= 3) tr.className = 'place-' + placeNum;
+
+        const tdPlace = document.createElement('td');
+        tdPlace.className = 'col-place';
+        tdPlace.innerHTML = MEDALS[placeNum] ? '<span class="place-medal">' + MEDALS[placeNum] + '</span>' : escapeHtml(r.place);
+
+        const tdPlayer = document.createElement('td');
+        const url = buildProfileUrl(r.vk);
+        if (url) {
+          const a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.textContent = r.nick;
+          tdPlayer.appendChild(a);
+        } else {
+          tdPlayer.textContent = r.nick;
+        }
+
+        const tdRt = document.createElement('td');
+        tdRt.className = 'col-rt';
+        tdRt.textContent = r.rt;
+
+        tr.append(tdPlace, tdPlayer, tdRt);
+        publicBody.appendChild(tr);
+      });
+
+      publicLoading.style.display = 'none';
+      publicTable.style.display = '';
+    }
+
+    async function loadPublicView() {
+      try {
+        const table = await fetchCsv();
+        const allRows = parseRows(table, null);
+        if (allRows.length === 0) {
+          throw new Error("В таблице нет данных.");
+        }
+        renderPublicTable(allRows);
+      } catch (e) {
+        publicLoading.style.display = 'none';
+        publicError.style.display = '';
+        publicError.textContent = extractError(e);
+      }
     }
 
     let updating = false;
@@ -277,6 +353,15 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       parseLaunchParams();
       if (versionPill) versionPill.textContent = 'v' + VERSION;
       await bridge.send('VKWebAppInit');
+
+      // Режим: если есть group_id — админ-панель, иначе — публичная таблица
+      if (groupId) {
+        adminView.style.display = '';
+      } else {
+        publicView.style.display = '';
+        loadPublicView();
+        return;
+      }
 
       btnAuth?.addEventListener('click', async () => {
         try {
