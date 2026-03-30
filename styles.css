@@ -118,6 +118,10 @@ pre {
   border-top: 1px solid #f0f0f0;
 }
 
+.rt-table tbody tr:nth-child(odd) {
+  background: #f0f4f8;
+}
+
 .rt-table tbody tr:nth-child(even) {
   background: #f9fafb;
 }
