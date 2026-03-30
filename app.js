@@ -7,16 +7,16 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
+    const VERSION = '1.0.0';
     const bridge = window.vkBridge;
 
     const groupPill = document.getElementById('groupPill');
     const appPill = document.getElementById('appPill');
     const vkPill = document.getElementById('vkPill');
-    const loadedAtPill = document.getElementById('loadedAtPill');
+    const versionPill = document.getElementById('versionPill');
 
     const btnAuth = document.getElementById('btnAuth');
     const btnLoad = document.getElementById('btnLoad');
-    const btnPreview = document.getElementById('btnPreview');
     const btnUpdate = document.getElementById('btnUpdate');
 
     const state = document.getElementById('state');
@@ -273,22 +273,9 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       }
     }
 
-    async function previewWidget() {
-      if (!loaded) await loadData();
-      const widget = buildWidgetObject(loaded);
-      const code = buildCode(widget);
-      await bridge.send('VKWebAppShowAppWidgetPreviewBox', { type: 'table', code });
-    }
-
     async function init() {
       parseLaunchParams();
-      if (loadedAtPill) {
-        const now = new Date();
-        const hh = String(now.getHours()).padStart(2, '0');
-        const mm = String(now.getMinutes()).padStart(2, '0');
-        const ss = String(now.getSeconds()).padStart(2, '0');
-        loadedAtPill.textContent = 'загружен: ' + hh + ':' + mm + ':' + ss;
-      }
+      if (versionPill) versionPill.textContent = 'v' + VERSION;
       await bridge.send('VKWebAppInit');
 
       btnAuth?.addEventListener('click', async () => {
@@ -315,15 +302,6 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         try {
           await loadData();
           setOk("Данные загружены ✅");
-        } catch (e) {
-          setBad(extractError(e));
-        }
-      });
-
-      btnPreview?.addEventListener('click', async () => {
-        try {
-          await previewWidget();
-          setOk("Предпросмотр открыт ✅");
         } catch (e) {
           setBad(extractError(e));
         }
