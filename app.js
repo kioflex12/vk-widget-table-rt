@@ -12,6 +12,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     const groupPill = document.getElementById('groupPill');
     const appPill = document.getElementById('appPill');
     const vkPill = document.getElementById('vkPill');
+    const loadedAtPill = document.getElementById('loadedAtPill');
 
     const btnAuth = document.getElementById('btnAuth');
     const btnLoad = document.getElementById('btnLoad');
@@ -84,7 +85,11 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     function buildProfileUrl(vkValue) {
       const s = (vkValue || '').trim();
       if (!s) return null;
-      if (s.startsWith('http://') || s.startsWith('https://')) return isVkUrl(s) ? s : null;
+      if (s.startsWith('http://') || s.startsWith('https://')) {
+        if (isVkUrl(s)) return s;
+        console.warn('Ссылка не VK-домен, пропущена:', s);
+        return null;
+      }
       return 'https://vk.com/' + s;
     }
 
@@ -277,6 +282,13 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
     async function init() {
       parseLaunchParams();
+      if (loadedAtPill) {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        const ss = String(now.getSeconds()).padStart(2, '0');
+        loadedAtPill.textContent = 'загружен: ' + hh + ':' + mm + ':' + ss;
+      }
       await bridge.send('VKWebAppInit');
 
       btnAuth?.addEventListener('click', async () => {
