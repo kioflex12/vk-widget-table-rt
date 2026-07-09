@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>RT Виджет</title>
-  <link rel="stylesheet" href="./styles.css?v=20260709_4">
+  <link rel="stylesheet" href="./styles.css?v=20260709_5">
 </head>
 <body>
   <!-- === Публичная таблица (для обычных пользователей) === -->
@@ -23,7 +23,7 @@
   <!-- === Админ-панель (для админов группы) === -->
   <div id="adminView" style="display:none">
     <div class="admin-wrap">
-      <header class="admin-header">
+      <header class="admin-header card">
         <h2 class="admin-title">Итоговая таблица RT</h2>
         <p class="admin-subtitle">Публикация лидерборда в виджет сообщества</p>
       </header>
@@ -53,10 +53,15 @@
         <h3 class="h3">VK code</h3>
         <pre id="codeView">—</pre>
       </details>
+
+      <details class="details-debug" id="previewBox">
+        <summary>Превью виджета</summary>
+        <div id="widgetPreview" class="widget-preview-empty">Загрузка превью…</div>
+      </details>
     </div>
   </div>
 
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-  <script src="./app.js?v=20260709_4"></script>
+  <script src="./app.js?v=20260709_5"></script>
 </body>
 </html>

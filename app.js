@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.10';
+    const VERSION = '1.0.11';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -271,6 +271,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       if (dataView) dataView.textContent = JSON.stringify({ rows: loaded }, null, 2);
       const widget = buildWidgetObject(loaded);
       if (codeView) codeView.textContent = buildCode(widget);
+      renderWidgetPreview(loaded);
     }
 
     const MEDALS = ['', '\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
@@ -308,6 +309,79 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
       publicLoading.style.display = 'none';
       publicTable.style.display = '';
+    }
+
+    // Превью того, как VK-виджет (type: table) выглядит в сообществе.
+    // Повторяет buildWidgetObject: заголовок, № / Игрок / RT, до LIMIT строк, "Показать всё".
+    function renderWidgetPreview(rows) {
+      const host = document.getElementById('widgetPreview');
+      if (!host) return;
+
+      host.classList.remove('widget-preview-empty');
+      host.innerHTML = '';
+
+      const card = document.createElement('div');
+      card.className = 'wp-card';
+
+      const title = document.createElement('div');
+      title.className = 'wp-title';
+      title.textContent = 'Итоговая таблица RT';
+      card.appendChild(title);
+
+      const table = document.createElement('table');
+      table.className = 'wp-table';
+
+      const thead = document.createElement('thead');
+      const htr = document.createElement('tr');
+      [['№', 'wp-c'], ['Игрок', ''], ['RT', 'wp-c']].forEach(([t, cls]) => {
+        const th = document.createElement('th');
+        if (cls) th.className = cls;
+        th.textContent = t;
+        htr.appendChild(th);
+      });
+      thead.appendChild(htr);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      rows.slice(0, LIMIT).forEach(r => {
+        const tr = document.createElement('tr');
+        const placeNum = Number(r.place);
+
+        const tdPlace = document.createElement('td');
+        tdPlace.className = 'wp-c';
+        tdPlace.innerHTML = MEDALS[placeNum] ? '<span class="place-medal">' + MEDALS[placeNum] + '</span>' : escapeHtml(r.place);
+
+        const tdPlayer = document.createElement('td');
+        const url = buildProfileUrl(r.vk);
+        if (url) {
+          const a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = r.nick;
+          tdPlayer.appendChild(a);
+        } else {
+          tdPlayer.textContent = r.nick;
+        }
+
+        const tdRt = document.createElement('td');
+        tdRt.className = 'wp-c';
+        tdRt.textContent = r.rt;
+
+        tr.append(tdPlace, tdPlayer, tdRt);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      card.appendChild(table);
+
+      if (appId) {
+        const more = document.createElement('div');
+        more.className = 'wp-more';
+        more.textContent = 'Показать всё';
+        card.appendChild(more);
+      }
+
+      host.appendChild(card);
     }
 
     async function loadPublicView() {
@@ -420,6 +494,22 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       }
 
       btnUpdate?.addEventListener('click', runFullUpdate);
+
+      // Превью подтягивает данные из таблицы при первом раскрытии (токен не нужен — читаем CSV).
+      const previewBox = document.getElementById('previewBox');
+      let previewLoading = false;
+      previewBox?.addEventListener('toggle', async () => {
+        if (!previewBox.open || loaded || previewLoading) return;
+        previewLoading = true;
+        try {
+          await loadData();
+        } catch (e) {
+          const host = document.getElementById('widgetPreview');
+          if (host) host.textContent = 'Не удалось загрузить превью: ' + extractError(e);
+        } finally {
+          previewLoading = false;
+        }
+      });
     }
 
     init().catch(e => console.error('init error:', e));
