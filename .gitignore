@@ -1,0 +1,13 @@
+# Google API / secrets — NEVER commit
+service-account*.json
+*.credentials.json
+*credentials*.json
+client_secret*.json
+.env
+.env.*
+*.key
+token.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
