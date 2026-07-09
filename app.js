@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.8';
+    const VERSION = '1.0.9';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -27,7 +27,6 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     const btnLoad = document.getElementById('btnLoad');
     const btnUpdate = document.getElementById('btnUpdate');
     const btnSheet = document.getElementById('btnSheet');
-    if (btnSheet) btnSheet.href = SHEET_EDIT_URL;
 
     const state = document.getElementById('state');
     const dataView = document.getElementById('dataView');
@@ -42,6 +41,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     // Редактируемая Google-таблица (куда админ вносит ники и RT).
     // Не путать с PUB_ID — это опубликованная (read-only) версия для чтения CSV.
     const SHEET_EDIT_URL = "https://docs.google.com/spreadsheets/d/1wVC4jjUPBmTE9Lh8sWG2q8Iqk8MoVjdp5HFd2u81V_w/edit?gid=1760608021#gid=1760608021";
+    if (btnSheet) btnSheet.href = SHEET_EDIT_URL;
 
     let groupId = null;
     let appId = null;
