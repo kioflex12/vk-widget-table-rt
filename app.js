@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.9';
+    const VERSION = '1.0.10';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -23,8 +23,6 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     const vkPill = document.getElementById('vkPill');
     const versionPill = document.getElementById('versionPill');
 
-    const btnAuth = document.getElementById('btnAuth');
-    const btnLoad = document.getElementById('btnLoad');
     const btnUpdate = document.getElementById('btnUpdate');
     const btnSheet = document.getElementById('btnSheet');
 
@@ -73,6 +71,10 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
     function setBad(text) {
       state.innerHTML = '<span class="bad">' + escapeHtml(text) + '</span>';
+    }
+
+    function setInfo(text) {
+      state.innerHTML = '<span class="info"><span class="spinner"></span>' + escapeHtml(text) + '</span>';
     }
 
     function parseLaunchParams() {
@@ -329,7 +331,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       if (updating) return;
       updating = true;
       try {
-        if (!communityToken) throw new Error("Сначала получи токен (кнопка 1).");
+        if (!communityToken) throw new Error("Нет токена сообщества.");
         if (!loaded) await loadData();
 
         const widget = buildWidgetObject(loaded);
@@ -373,45 +375,51 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         return;
       }
 
-      btnAuth?.addEventListener('click', async () => {
+      // Одна кнопка: токен → загрузка данных → обновление виджета, по очереди.
+      let running = false;
+
+      async function runFullUpdate() {
+        if (running) return;
+        running = true;
+        const label = btnUpdate ? btnUpdate.textContent : '';
+        if (btnUpdate) {
+          btnUpdate.disabled = true;
+          btnUpdate.innerHTML = '<span class="spinner"></span>Обновляю…';
+        }
         try {
           if (!groupId || !appId) {
-            setBad("Открой мини-приложение из группы (как админ), чтобы появился group_id.");
+            setBad("Открой мини-приложение из сообщества (как админ) — нет group_id.");
             return;
           }
 
+          setInfo("1/3 · Получаю токен…");
           const res = await bridge.send('VKWebAppGetCommunityAuthToken', {
             app_id: appId,
             group_id: groupId,
             scope: 'app_widget'
           });
-
           communityToken = res.access_token;
-          setOk("Токен получен ✅");
-        } catch (e) {
-          setBad("Ошибка токена");
-        }
-      });
 
-      btnLoad?.addEventListener('click', async () => {
-        try {
+          setInfo("2/3 · Загружаю данные из таблицы…");
           await loadData();
-          setOk("Данные загружены ✅");
-        } catch (e) {
-          setBad(extractError(e));
-        }
-      });
 
-      btnUpdate?.addEventListener('click', async () => {
-        try {
-          await loadData();
+          setInfo("3/3 · Обновляю виджет…");
           await updateWidget();
-          setOk("Виджет обновлён ✅");
+
+          setOk("Готово · виджет обновлён ✅");
         } catch (e) {
-          console.error("updateWidget error:", e);
+          console.error("runFullUpdate error:", e);
           setBad(extractError(e));
+        } finally {
+          running = false;
+          if (btnUpdate) {
+            btnUpdate.disabled = false;
+            btnUpdate.textContent = label;
+          }
         }
-      });
+      }
+
+      btnUpdate?.addEventListener('click', runFullUpdate);
     }
 
     init().catch(e => console.error('init error:', e));
