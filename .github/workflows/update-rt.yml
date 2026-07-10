@@ -1,0 +1,39 @@
+name: Update RT table
+
+# Автообновление итоговой таблицы RT: расчёт из mafrate.pro + gomafia.pro и запись
+# в лист "RT DATA" published-Google-Sheet, откуда её читает VK-виджет.
+
+on:
+  workflow_dispatch: {}          # ручной запуск из вкладки Actions
+  schedule:
+    - cron: "0 6 * * *"          # ежедневно в 06:00 UTC
+
+# запрещаем параллельные прогоны, чтобы две записи не пересеклись
+concurrency:
+  group: update-rt
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update-rt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r pipeline/requirements.txt
+
+      - name: Run pipeline (compute + write RT DATA)
+        env:
+          MAFRATE_LOGIN: ${{ secrets.MAFRATE_LOGIN }}
+          MAFRATE_PASSWORD: ${{ secrets.MAFRATE_PASSWORD }}
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+        run: python pipeline/rt_pipeline_fast.py

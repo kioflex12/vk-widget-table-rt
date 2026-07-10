@@ -8,6 +8,18 @@ client_secret*.json
 *.key
 token.json
 
+# RT pipeline: локальные креды (страховка — реальные креды живут в GitHub Secrets)
+mafrate_creds.json
+rt-widget-sa.json
+*sa*.json
+
+# RT pipeline: кэш-артефакты (турниры/месяцы/roster/манифест) — не в дерево репо
+.rtcache/
+
+# Python
+__pycache__/
+*.pyc
+
 # OS / editor noise
 .DS_Store
 Thumbs.db
