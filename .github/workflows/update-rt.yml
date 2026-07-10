@@ -36,4 +36,6 @@ jobs:
           MAFRATE_LOGIN: ${{ secrets.MAFRATE_LOGIN }}
           MAFRATE_PASSWORD: ${{ secrets.MAFRATE_PASSWORD }}
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          # Опциональный: сервисный токен VK для аватарок (users.get). Нет секрета -> пишем без аватарок.
+          VK_SERVICE_TOKEN: ${{ secrets.VK_SERVICE_TOKEN }}
         run: python pipeline/rt_pipeline_fast.py

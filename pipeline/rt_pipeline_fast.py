@@ -376,10 +376,84 @@ def run(mode="cold"):
     }
 
 # ---------------- запись в Google Sheet (RT DATA) ----------------
-def build_rows(table):
-    """table [(nick, rt), ...] (уже отсортирована по RT убыв.) -> строки данных [[Nick, VK, RT], ...].
-    Пишем только игроков с RT > 0 (это же ГАРД: сломанный источник обнуляет RT -> строк < порога)."""
-    return [[nick, VK_LINKS.get(nick, ""), rt] for nick, rt in table if rt and rt > 0]
+def build_rows(table, avatars=None):
+    """table [(nick, rt), ...] (уже отсортирована по RT убыв.) -> строки данных
+    [[Nick, VK, RT, Avatar], ...]. Пишем только игроков с RT > 0 (это же ГАРД:
+    сломанный источник обнуляет RT -> строк < порога). Ширина строки ВСЕГДА 4:
+    avatar='' при отсутствии/сбое, чтобы колонка D была консистентна между прогонами."""
+    avatars = avatars or {}
+    return [[nick, VK_LINKS.get(nick, ""), rt, avatars.get(nick, "")]
+            for nick, rt in table if rt and rt > 0]
+
+
+# --- Аватарки игроков (бонус-фича для публичной HTML-таблицы; НИКОГДА не роняет запись RT) ---
+VK_API_VERSION = "5.199"
+
+def _vk_identifier(link):
+    """Из VK-ссылки достаём идентификатор для users.get:
+    vk.com/id123 -> 'id123', vk.com/shortname -> 'shortname'. Пусто/не vk -> None."""
+    if not link:
+        return None
+    m = re.search(r"vk\.com/([A-Za-z0-9_]+)", link.strip())
+    return m.group(1) if m else None
+
+def resolve_avatars(nick_links):
+    """nick_links: [(nick, vk_link), ...] -> {nick: photo_url}. ОДИН батч users.get
+    сервисным токеном из VK_SERVICE_TOKEN. Сопоставление ответа — по возвращённому
+    id / screen_name / domain, НЕ позиционно (deactivated остаются в ответе без фото).
+    Токен и request-url в лог НЕ пишем. Любой сбой -> {} (запись RT не страдает)."""
+    token = os.environ.get("VK_SERVICE_TOKEN")
+    if not token:
+        print("[avatars] VK_SERVICE_TOKEN не задан — пишу без аватарок")
+        return {}
+
+    req = []  # [(nick, ident)] — только непустые VK-ссылки
+    for nick, link in nick_links:
+        ident = _vk_identifier(link)
+        if ident:
+            req.append((nick, ident))
+    if not req:
+        return {}
+
+    try:
+        resp = requests.get(
+            "https://api.vk.com/method/users.get",
+            params={"user_ids": ",".join(i for _, i in req),
+                    "fields": "photo_200,screen_name,domain",
+                    "v": VK_API_VERSION, "access_token": token},
+            timeout=30,
+        )
+        data = resp.json()
+    except Exception as e:
+        print("[avatars] users.get не удался: %s: %s — пишу без аватарок" % (type(e).__name__, e))
+        return {}
+
+    if isinstance(data, dict) and "error" in data:
+        # НЕ печатаем error целиком: там request_params с токеном
+        print("[avatars] users.get вернул error code=%s — пишу без аватарок"
+              % (data.get("error", {}) or {}).get("error_code"))
+        return {}
+
+    # ответ -> {ключ: photo}, ключи и по числовому id, и по screen_name/domain (lower)
+    photo_by_key = {}
+    for u in (data.get("response") or []):
+        if u.get("deactivated") or not u.get("photo_200"):
+            continue
+        photo_by_key[str(u.get("id"))] = u["photo_200"]
+        for k in (u.get("screen_name"), u.get("domain")):
+            if k:
+                photo_by_key[k.lower()] = u["photo_200"]
+
+    out = {}
+    for nick, ident in req:
+        m = re.fullmatch(r"id(\d+)", ident)
+        key = m.group(1) if m else ident.lower()
+        photo = photo_by_key.get(key)
+        if photo:
+            out[nick] = photo
+
+    print("[avatars] резолвлено %d из %d ссылок" % (len(out), len(req)))
+    return out
 
 def _gs_worksheet():
     """Авторизация по service-account из GOOGLE_SA_JSON (не из файла). Содержимое SA не печатается."""
@@ -401,13 +475,21 @@ def _gs_worksheet():
 def write_to_sheet(table):
     """ГАРД + идемпотентная запись в лист RT DATA. Возвращает число записанных строк данных.
     Гард на логин/сеть отработал раньше (run() уже бросил бы исключение до сюда)."""
-    data = build_rows(table)
+    # Аватарки — бонус: резолв обёрнут так, что любой сбой не роняет запись RT.
+    try:
+        needed = [(nick, VK_LINKS.get(nick, "")) for nick, rt in table if rt and rt > 0]
+        avatars = resolve_avatars(needed)
+    except Exception as e:
+        print("[avatars] резолв упал (%s: %s) — пишу без аватарок" % (type(e).__name__, e))
+        avatars = {}
+
+    data = build_rows(table, avatars)
     if len(data) < MIN_ROWS:
         raise RuntimeError("ГАРД: итоговых строк %d < порога %d — источник считаем сломанным, "
                            "запись отменена" % (len(data), MIN_ROWS))
     ws = _gs_worksheet()
-    rows = [["Nick", "VK", "RT"]] + data
-    ws.batch_clear(["A1:C1000"])                       # идемпотентно: чистим прежний диапазон
+    rows = [["Nick", "VK", "RT", "Avatar"]] + data
+    ws.batch_clear(["A1:D1000"])                       # идемпотентно: чистим прежний диапазон (вкл. колонку D)
     ws.update(range_name="A1", values=rows)            # затем пишем актуальные строки
     print("RT DATA обновлён: записано %d строк данных (+заголовок) в лист '%s'"
           % (len(data), SHEET_NAME))
