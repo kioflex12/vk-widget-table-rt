@@ -376,14 +376,10 @@ def run(mode="cold"):
     }
 
 # ---------------- запись в Google Sheet (RT DATA) ----------------
-def build_rows(table, avatars=None):
-    """table [(nick, rt), ...] (уже отсортирована по RT убыв.) -> строки данных
-    [[Nick, VK, RT, Avatar], ...]. Пишем только игроков с RT > 0 (это же ГАРД:
-    сломанный источник обнуляет RT -> строк < порога). Ширина строки ВСЕГДА 4:
-    avatar='' при отсутствии/сбое, чтобы колонка D была консистентна между прогонами."""
-    avatars = avatars or {}
-    return [[nick, VK_LINKS.get(nick, ""), rt, avatars.get(nick, "")]
-            for nick, rt in table if rt and rt > 0]
+def build_rows(table):
+    """table [(nick, rt), ...] (уже отсортирована по RT убыв.) -> строки данных [[Nick, VK, RT], ...].
+    Пишем только игроков с RT > 0 (это же ГАРД: сломанный источник обнуляет RT -> строк < порога)."""
+    return [[nick, VK_LINKS.get(nick, ""), rt] for nick, rt in table if rt and rt > 0]
 
 
 # --- Аватарки игроков (бонус-фича для публичной HTML-таблицы; НИКОГДА не роняет запись RT) ---
@@ -455,6 +451,27 @@ def resolve_avatars(nick_links):
     print("[avatars] резолвлено %d из %d ссылок" % (len(out), len(req)))
     return out
 
+# --- avatars.json: аватарки едут в репо/GitHub Pages, НЕ через закрытый лист-лидерборд ---
+AVATARS_JSON = os.path.join(os.path.dirname(HERE), "avatars.json")
+
+def write_avatars_json(table):
+    """Резолвит аватарки и пишет {nick: photo_url} в avatars.json в корне репо
+    (его коммитит workflow; публичная страница мёржит по нику). Бонус-фича:
+    любой сбой не роняет прогон, а пустой результат НЕ затирает существующий файл."""
+    try:
+        needed = [(nick, VK_LINKS.get(nick, "")) for nick, rt in table if rt and rt > 0]
+        avatars = resolve_avatars(needed)
+        if not avatars:
+            print("[avatars] пусто (нет токена/резолвов) — avatars.json не трогаю")
+            return 0
+        with io.open(AVATARS_JSON, "w", encoding="utf-8") as f:
+            json.dump(avatars, f, ensure_ascii=False, indent=2, sort_keys=True)
+        print("[avatars] avatars.json обновлён: %d фото" % len(avatars))
+        return len(avatars)
+    except Exception as e:
+        print("[avatars] запись avatars.json не удалась: %s: %s" % (type(e).__name__, e))
+        return 0
+
 def _gs_worksheet():
     """Авторизация по service-account из GOOGLE_SA_JSON (не из файла). Содержимое SA не печатается."""
     import gspread
@@ -475,21 +492,13 @@ def _gs_worksheet():
 def write_to_sheet(table):
     """ГАРД + идемпотентная запись в лист RT DATA. Возвращает число записанных строк данных.
     Гард на логин/сеть отработал раньше (run() уже бросил бы исключение до сюда)."""
-    # Аватарки — бонус: резолв обёрнут так, что любой сбой не роняет запись RT.
-    try:
-        needed = [(nick, VK_LINKS.get(nick, "")) for nick, rt in table if rt and rt > 0]
-        avatars = resolve_avatars(needed)
-    except Exception as e:
-        print("[avatars] резолв упал (%s: %s) — пишу без аватарок" % (type(e).__name__, e))
-        avatars = {}
-
-    data = build_rows(table, avatars)
+    data = build_rows(table)
     if len(data) < MIN_ROWS:
         raise RuntimeError("ГАРД: итоговых строк %d < порога %d — источник считаем сломанным, "
                            "запись отменена" % (len(data), MIN_ROWS))
     ws = _gs_worksheet()
-    rows = [["Nick", "VK", "RT", "Avatar"]] + data
-    ws.batch_clear(["A1:D1000"])                       # идемпотентно: чистим прежний диапазон (вкл. колонку D)
+    rows = [["Nick", "VK", "RT"]] + data
+    ws.batch_clear(["A1:C1000"])                       # идемпотентно: чистим прежний диапазон
     ws.update(range_name="A1", values=rows)            # затем пишем актуальные строки
     print("RT DATA обновлён: записано %d строк данных (+заголовок) в лист '%s'"
           % (len(data), SHEET_NAME))
@@ -556,6 +565,7 @@ if __name__ == "__main__":
             print("DRY-RUN: запись пропущена; к записи готово %d строк данных" % len(data))
         else:
             write_to_sheet(res["table"])
+            write_avatars_json(res["table"])
     except Exception as e:
         # понятное сообщение БЕЗ секретов; ненулевой код -> джоб GitHub Actions падает
         print("ОШИБКА КОНВЕЙЕРА: %s: %s" % (type(e).__name__, e), file=sys.stderr)

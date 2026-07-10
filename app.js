@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.14';
+    const VERSION = '1.0.15';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -462,6 +462,22 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       host.appendChild(card);
     }
 
+    // Фото-аватарки приходят отдельным файлом avatars.json (репо/GitHub Pages),
+    // а НЕ из закрытого листа-лидерборда. Мёржим по нику; сбой не критичен ->
+    // остаются кружки-инициалы. Хост URL всё равно проверяется в buildAvatar.
+    async function applyAvatars(rows) {
+      try {
+        const resp = await fetch('./avatars.json?t=' + Date.now(), { cache: 'no-store' });
+        if (!resp.ok) return;
+        const map = await resp.json();
+        if (!map || typeof map !== 'object') return;
+        rows.forEach(r => {
+          const url = map[r.nick];
+          if (typeof url === 'string') r.avatar = url;
+        });
+      } catch { /* нет файла / битый JSON -> инициалы */ }
+    }
+
     async function loadPublicView() {
       try {
         const table = await fetchCsv();
@@ -469,6 +485,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         if (allRows.length === 0) {
           throw new Error("В таблице нет данных.");
         }
+        await applyAvatars(allRows);
         renderPublicTable(allRows);
       } catch (e) {
         publicLoading.style.display = 'none';

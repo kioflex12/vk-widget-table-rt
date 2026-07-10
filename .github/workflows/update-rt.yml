@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write          # нужно, чтобы коммитить обновлённый avatars.json
 
 jobs:
   update-rt:
@@ -36,6 +36,18 @@ jobs:
           MAFRATE_LOGIN: ${{ secrets.MAFRATE_LOGIN }}
           MAFRATE_PASSWORD: ${{ secrets.MAFRATE_PASSWORD }}
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
-          # Опциональный: сервисный токен VK для аватарок (users.get). Нет секрета -> пишем без аватарок.
+          # Опциональный: сервисный токен VK для аватарок (users.get). Нет секрета -> avatars.json не трогаем.
           VK_SERVICE_TOKEN: ${{ secrets.VK_SERVICE_TOKEN }}
         run: python pipeline/rt_pipeline_fast.py
+
+      - name: Commit avatars.json (если изменился)
+        run: |
+          if [ -n "$(git status --porcelain avatars.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add avatars.json
+            git commit -m "chore: обновить avatars.json (автообновление аватарок)"
+            git push
+          else
+            echo "avatars.json не изменился — коммит не нужен"
+          fi
