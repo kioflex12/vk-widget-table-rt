@@ -208,6 +208,13 @@ pre {
   color: var(--text);
 }
 
+.wp-title-counter {
+  margin-left: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .wp-table {
   width: 100%;
   border-collapse: collapse;

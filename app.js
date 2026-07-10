@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.12';
+    const VERSION = '1.0.13';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -52,6 +52,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     let appId = null;
     let communityToken = null;
     let loaded = null;
+    let loadedTotal = 0;
 
     function escapeHtml(s) {
       return String(s)
@@ -116,7 +117,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       return 'https://vk.com/' + s;
     }
 
-    function buildWidgetObject(rows) {
+    function buildWidgetObject(rows, totalCount) {
       const head = [
         { text: '№', align: 'center' },
         { text: 'Игрок' },
@@ -124,7 +125,10 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       ];
 
       const body = rows.slice(0, LIMIT).map(r => {
-        const placeCell = { text: String(r.place || ''), align: 'center' };
+        // Топ-3 показываем медалью вместо номера (как в публичной таблице), остальные — числом.
+        const placeNum = Number(r.place);
+        const placeText = MEDALS[placeNum] || String(r.place || '');
+        const placeCell = { text: placeText, align: 'center' };
 
         const url = buildProfileUrl(r.vk);
         const playerCell = url ? { text: r.nick, url } : { text: r.nick };
@@ -139,6 +143,11 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         head,
         body
       };
+
+      // Счётчик общего числа участников рядом с заголовком.
+      if (totalCount && totalCount > 0) {
+        widget.title_counter = totalCount;
+      }
 
       // Кнопка "Показать всё" -> открывает мини-приложение с полной таблицей
       if (appId) {
@@ -267,18 +276,20 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
     async function loadData() {
       const table = await fetchCsv();
-      const parsed = parseRows(table, LIMIT);
+      const allRows = parseRows(table, null);
+      const parsed = allRows.slice(0, LIMIT);
 
       if (parsed.length === 0) {
         throw new Error("В таблице нет данных. Ожидаю колонки: A=Nick, B=VK, C=RT.");
       }
 
       loaded = parsed;
+      loadedTotal = allRows.length;
 
       if (dataView) dataView.textContent = JSON.stringify({ rows: loaded }, null, 2);
-      const widget = buildWidgetObject(loaded);
+      const widget = buildWidgetObject(loaded, loadedTotal);
       if (codeView) codeView.textContent = buildCode(widget);
-      renderWidgetPreview(loaded);
+      renderWidgetPreview(loaded, loadedTotal);
     }
 
     const MEDALS = ['', '\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
@@ -320,7 +331,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
     // Превью того, как VK-виджет (type: table) выглядит в сообществе.
     // Повторяет buildWidgetObject: заголовок, № / Игрок / RT, до LIMIT строк, "Показать всё".
-    function renderWidgetPreview(rows) {
+    function renderWidgetPreview(rows, totalCount) {
       const host = document.getElementById('widgetPreview');
       if (!host) return;
 
@@ -333,6 +344,12 @@ if (window.__RT_WIDGET_APP_LOADED__) {
       const title = document.createElement('div');
       title.className = 'wp-title';
       title.textContent = 'Итоговая таблица RT';
+      if (totalCount && totalCount > 0) {
+        const counter = document.createElement('span');
+        counter.className = 'wp-title-counter';
+        counter.textContent = totalCount;
+        title.appendChild(counter);
+      }
       card.appendChild(title);
 
       const table = document.createElement('table');
@@ -415,7 +432,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         if (!communityToken) throw new Error("Нет токена сообщества.");
         if (!loaded) await loadData();
 
-        const widget = buildWidgetObject(loaded);
+        const widget = buildWidgetObject(loaded, loadedTotal);
         const code = buildCode(widget);
 
         const out = await bridge.send('VKWebAppCallAPIMethod', {
