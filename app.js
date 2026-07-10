@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.13';
+    const VERSION = '1.0.14';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -254,6 +254,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         const nick = (table[i][0] ?? '').toString().trim();
         const vk = (table[i][1] ?? '').toString().trim();
         const rt = (table[i][2] ?? '').toString().trim();
+        const avatar = (table[i][3] ?? '').toString().trim();
 
         if (!nick) continue;
 
@@ -261,7 +262,8 @@ if (window.__RT_WIDGET_APP_LOADED__) {
           place: String(parsed.length + 1),
           nick,
           vk,
-          rt
+          rt,
+          avatar
         });
       }
 
@@ -294,6 +296,50 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
     const MEDALS = ['', '\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
 
+    // --- \u0410\u0432\u0430\u0442\u0430\u0440\u043A\u0438 \u0438\u0433\u0440\u043E\u043A\u043E\u0432 (\u0442\u043E\u043B\u044C\u043A\u043E \u0432 \u043F\u0443\u0431\u043B\u0438\u0447\u043D\u043E\u0439 \u0442\u0430\u0431\u043B\u0438\u0446\u0435, \u041D\u0415 \u0432 VK-\u0432\u0438\u0434\u0436\u0435\u0442\u0435) ---
+    // \u0420\u0435\u0430\u043B\u044C\u043D\u043E\u0435 \u0444\u043E\u0442\u043E \u043F\u0440\u0438\u0445\u043E\u0434\u0438\u0442 \u0438\u0437 \u043A\u043E\u043B\u043E\u043D\u043A\u0438 D \u043B\u0438\u0441\u0442\u0430 (URL VK-CDN, *.userapi.com).
+    // \u0415\u0441\u043B\u0438 \u0441\u0441\u044B\u043B\u043A\u0438 \u043D\u0435\u0442 \u0438\u043B\u0438 \u043E\u043D\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430 \u2014 \u0440\u0438\u0441\u0443\u0435\u043C \u043A\u0440\u0443\u0436\u043E\u043A \u0441 \u043F\u0435\u0440\u0432\u043E\u0439 \u0431\u0443\u043A\u0432\u043E\u0439 \u043D\u0438\u043A\u0430.
+
+    // \u0420\u0430\u0437\u0440\u0435\u0448\u0430\u0435\u043C \u0442\u043E\u043B\u044C\u043A\u043E \u0445\u043E\u0441\u0442 VK-CDN: \u0438\u043D\u0430\u0447\u0435 \u0447\u0435\u0440\u0435\u0437 \u043F\u043E\u0440\u0447\u0443 \u044F\u0447\u0435\u0439\u043A\u0438 \u0432 <img src>
+    // \u043C\u043E\u0436\u043D\u043E \u043F\u043E\u0434\u0441\u0443\u043D\u0443\u0442\u044C \u043F\u0440\u043E\u0438\u0437\u0432\u043E\u043B\u044C\u043D\u044B\u0439 \u0441\u0442\u043E\u0440\u043E\u043D\u043D\u0438\u0439/\u0442\u0440\u0435\u043A\u0438\u043D\u0433\u043E\u0432\u044B\u0439 URL.
+    function isAvatarUrl(u) {
+      try {
+        const host = new URL(u).hostname.replace(/^www\./, '');
+        return host === 'userapi.com' || host.endsWith('.userapi.com');
+      } catch { return false; }
+    }
+
+    // \u0421\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u044B\u0439 \u0446\u0432\u0435\u0442 \u043A\u0440\u0443\u0436\u043A\u0430 \u0438\u0437 \u043D\u0438\u043A\u0430 (\u043E\u0434\u0438\u043D \u043D\u0438\u043A -> \u043E\u0434\u0438\u043D \u0446\u0432\u0435\u0442).
+    function avatarHue(nick) {
+      let h = 0;
+      for (let i = 0; i < nick.length; i++) h = (h * 31 + nick.charCodeAt(i)) % 360;
+      return h;
+    }
+
+    function buildInitialAvatar(nick) {
+      const span = document.createElement('span');
+      span.className = 'avatar avatar-initial';
+      span.textContent = ((nick || '').trim()[0] || '?').toUpperCase();
+      span.style.backgroundColor = 'hsl(' + avatarHue(nick || '') + ', 55%, 52%)';
+      span.setAttribute('aria-hidden', 'true');
+      return span;
+    }
+
+    // \u0410\u0432\u0430\u0442\u0430\u0440 \u0438\u0433\u0440\u043E\u043A\u0430: \u0444\u043E\u0442\u043E (\u0432\u0430\u043B\u0438\u0434\u043D\u044B\u0439 VK-CDN URL) \u0441 \u0444\u043E\u043B\u0431\u044D\u043A\u043E\u043C \u043D\u0430 \u043A\u0440\u0443\u0436\u043E\u043A-\u0438\u043D\u0438\u0446\u0438\u0430\u043B.
+    function buildAvatar(r) {
+      if (isAvatarUrl(r.avatar)) {
+        const img = document.createElement('img');
+        img.className = 'avatar avatar-img';
+        img.alt = '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.src = r.avatar; // \u0447\u0435\u0440\u0435\u0437 \u0441\u0432\u043E\u0439\u0441\u0442\u0432\u043E, \u043D\u0435 innerHTML
+        img.addEventListener('error', () => img.replaceWith(buildInitialAvatar(r.nick)));
+        return img;
+      }
+      return buildInitialAvatar(r.nick);
+    }
+
     function renderPublicTable(rows) {
       publicBody.innerHTML = '';
       rows.forEach(r => {
@@ -306,16 +352,24 @@ if (window.__RT_WIDGET_APP_LOADED__) {
         tdPlace.innerHTML = MEDALS[placeNum] ? '<span class="place-medal">' + MEDALS[placeNum] + '</span>' : escapeHtml(r.place);
 
         const tdPlayer = document.createElement('td');
+        const cell = document.createElement('span');
+        cell.className = 'player-cell';
+        cell.appendChild(buildAvatar(r));
+
         const url = buildProfileUrl(r.vk);
         if (url) {
           const a = document.createElement('a');
           a.href = url;
           a.target = '_blank';
+          a.rel = 'noopener';
           a.textContent = r.nick;
-          tdPlayer.appendChild(a);
+          cell.appendChild(a);
         } else {
-          tdPlayer.textContent = r.nick;
+          const nameEl = document.createElement('span');
+          nameEl.textContent = r.nick;
+          cell.appendChild(nameEl);
         }
+        tdPlayer.appendChild(cell);
 
         const tdRt = document.createElement('td');
         tdRt.className = 'col-rt';
