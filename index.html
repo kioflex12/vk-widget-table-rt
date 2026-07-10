@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>RT Виджет</title>
-  <link rel="stylesheet" href="./styles.css?v=20260709_5">
+  <link rel="stylesheet" href="./styles.css?v=20260709_6">
 </head>
 <body>
   <!-- === Публичная таблица (для обычных пользователей) === -->
@@ -40,10 +40,11 @@
       <div class="card">
         <div class="actions">
           <button id="btnUpdate" class="btn btn-primary">Обновить виджет</button>
+          <a id="btnGithub" class="btn btn-secondary" href="#" target="_blank" rel="noopener noreferrer">🔄 Обновить данные (GitHub)</a>
           <a id="btnSheet" class="btn btn-secondary" href="#" target="_blank" rel="noopener noreferrer">📊 Открыть таблицу</a>
         </div>
         <div class="state-line" id="state"></div>
-        <p class="hint">Одна кнопка выполнит всё по очереди: получит токен, загрузит данные из Google-таблицы и обновит виджет в сообществе. Открывай мини-приложение как админ сообщества — иначе не будет доступа.</p>
+        <p class="hint"><b>Обновить данные (GitHub)</b> — пересчитывает таблицу из mafrate и gomafia: откроется GitHub, там нажми «Run workflow», через ~1–2 мин данные в таблице обновятся. Затем <b>Обновить виджет</b> публикует таблицу в сообщество (получит токен, загрузит данные и обновит виджет). Открывай мини-приложение как админ сообщества — иначе не будет доступа.</p>
       </div>
 
       <details class="details-debug">
@@ -62,6 +63,6 @@
   </div>
 
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-  <script src="./app.js?v=20260709_5"></script>
+  <script src="./app.js?v=20260709_6"></script>
 </body>
 </html>

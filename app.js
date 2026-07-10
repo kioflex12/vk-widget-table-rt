@@ -7,7 +7,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
   window.__RT_WIDGET_APP_LOADED__ = true;
 
   (() => {
-    const VERSION = '1.0.11';
+    const VERSION = '1.0.12';
     const bridge = window.vkBridge;
 
     // Режимы: публичная таблица / админ-панель
@@ -25,6 +25,7 @@ if (window.__RT_WIDGET_APP_LOADED__) {
 
     const btnUpdate = document.getElementById('btnUpdate');
     const btnSheet = document.getElementById('btnSheet');
+    const btnGithub = document.getElementById('btnGithub');
 
     const state = document.getElementById('state');
     const dataView = document.getElementById('dataView');
@@ -40,6 +41,12 @@ if (window.__RT_WIDGET_APP_LOADED__) {
     // Не путать с PUB_ID — это опубликованная (read-only) версия для чтения CSV.
     const SHEET_EDIT_URL = "https://docs.google.com/spreadsheets/d/1wVC4jjUPBmTE9Lh8sWG2q8Iqk8MoVjdp5HFd2u81V_w/edit?gid=1760608021#gid=1760608021";
     if (btnSheet) btnSheet.href = SHEET_EDIT_URL;
+
+    // GitHub Actions workflow, который пересчитывает таблицу из mafrate/gomafia.
+    // Кнопка ведёт на страницу запуска — админ жмёт там "Run workflow".
+    // Прямой запуск из клиента невозможен: нужен токен, а его нельзя держать в публичном коде.
+    const GITHUB_WORKFLOW_URL = "https://github.com/kioflex12/vk-widget-table-rt/actions/workflows/update-rt.yml";
+    if (btnGithub) btnGithub.href = GITHUB_WORKFLOW_URL;
 
     let groupId = null;
     let appId = null;
