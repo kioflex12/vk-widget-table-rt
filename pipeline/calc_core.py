@@ -97,16 +97,22 @@ MERGES = collections.OrderedDict([
 ])
 SECONDARY_TO_PRIMARY = {s: p for p, ss in MERGES.items() for s in ss}
 
-# control nick -> primary uid (32 players)
-IDENTITY = collections.OrderedDict([
-    ('Свой', '4403'), ('Price', '3987'), ('Shegan', '1547'), ('Натс', '4418'),
-    ('Zhnec', '5204'), ('Бу.Ханка', '3847'), ('Videns', '9390'), ('Совесть', '6562'),
-    ('Sun', '6978'), ('Леви', '8876'), ('Detect', '446'), ('Инга', '3806'),
-    ('Tatle', '4113'), ('Мышь', '7313'), ('Vodomerka', '8468'), ('Шальная', '1064'),
-    ('Тигр', '1000'), ('Техник', '1049'), ('Заба', '7261'), ('Dee', '3788'),
-    ('Актриса', '1050'), ('Морф', '3765'), ('Йода', '4758'), ('Малинka', '1069'),
-    ('Hanna', '5130'), ('Анталия', '3971'), ('Хэль', '3873'), ('Vyaza', '3733'),
-    ('Адалин', '3673'), ('Вишенка', '1028'), ('FREESTYLE', '4757'), ('Trouble', '7683'),
+# curated display-nick overrides: primary uid -> shown nick, ONLY where the gomafia
+# login differs from the club control-table nick (homoglyphs, trailing marks, aliases).
+# Everyone else is shown under their own gomafia login. МЕМБЕРШИП (кто в таблице) берётся
+# из ЖИВОГО ростера (ключи roster101), НЕ из этой карты — новый член появляется сам.
+NICK_OVERRIDE = collections.OrderedDict([
+    ('1547', 'Shegan'),
+    ('3847', 'Бу.Ханка'),
+    ('6562', 'Совесть'),
+    ('8876', 'Леви'),
+    ('7313', 'Мышь'),
+    ('7261', 'Заба'),
+    ('3788', 'Dee'),
+    ('4758', 'Йода'),
+    ('1069', 'Малинka'),
+    ('3971', 'Анталия'),
+    ('1028', 'Вишенка'),
 ])
 
 
@@ -370,17 +376,31 @@ def compute_gomafia(tournaments_dir, roster_set):
 
 
 # ---------------------------------------------------------------- public API
+def display_nick(uid, roster):
+    """Отображаемый ник члена ростера: курируемый оверрайд (NICK_OVERRIDE) либо, если его нет,
+    собственный логин gomafia из ростера. Единый источник для расчёта и для VK-слоя конвейера."""
+    return NICK_OVERRIDE.get(str(uid), (roster.get(str(uid)) or {}).get('login'))
+
+
 def compute_table(tournaments_dir, months_dir_or_files, roster_path):
-    """Return list of (nick, rt) sorted by RT desc then nick, for the 32 control players."""
+    """Return list of (nick, rt) sorted by RT desc then nick, for every PRIMARY roster member
+    with RT > 0.
+
+    Состав ДИНАМИЧЕСКИЙ: перебираем ключи живого ростера (roster101), а НЕ статичный список —
+    новый член клуба появляется сам. RT = cat1_for_primary(uid) + gomafia_totals(uid) (правила
+    расчёта не меняются). Ник = display_nick(uid, roster). Вторичные merge-аккаунты в ростере
+    отсутствуют, поэтому состав идёт строго по ПЕРВИЧНЫМ uid, а их история сфолжена в compute_*."""
     roster = json.load(open(roster_path, encoding='utf-8'))
     roster_set = set(roster.keys())
     cat1_per = compute_cat1(months_dir_or_files)
     gomafia_totals, _scored = compute_gomafia(tournaments_dir, roster_set)
 
     rows = []
-    for nick, uid in IDENTITY.items():
-        rt = cat1_for_primary(uid, cat1_per) + gomafia_totals.get(uid, 0)
-        rows.append((nick, int(round(rt))))
+    for uid in roster:
+        rt = int(round(cat1_for_primary(uid, cat1_per) + gomafia_totals.get(uid, 0)))
+        if rt <= 0:
+            continue
+        rows.append((display_nick(uid, roster), rt))
     rows.sort(key=lambda r: (-r[1], r[0]))
     return rows
 

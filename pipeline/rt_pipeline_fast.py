@@ -61,9 +61,11 @@ SHEET_NAME = os.environ.get("RT_SHEET_NAME", "RT DATA")
 # ГАРД: при исправных данных ожидаем ~32 строки; ниже порога — считаем источник сломанным
 MIN_ROWS = int(os.environ.get("RT_MIN_ROWS", "15"))
 
-# Профили-ссылки VK для контрольных игроков (та же схема, что дала контрольные 32 строки).
-# VK-ссылки курируются вручную (vanity-имена типа sava_svoi не выводятся из числового vk_id),
-# поэтому статичны. Ключи ДОЛЖНЫ совпадать с calc_core.IDENTITY. Нет в карте -> пустая ячейка.
+# Курируемый ОВЕРРАЙД VK-ссылок (vanity-имена типа sava_svoi не выводятся из числового vk_id,
+# их приходится задавать руками). Это уже НЕ источник состава: членов берём из живого ростера,
+# а VK для тех, кого здесь нет, строим динамически как https://vk.com/id<vk_id> из профиля.
+# Ключи — ОТОБРАЖАЕМЫЙ ник (calc_core.display_nick: NICK_OVERRIDE либо логин). Нет vk_id и нет
+# оверрайда -> пустая ячейка.
 VK_LINKS = {
     "Свой": "https://vk.com/sava_svoi",
     "Price": "https://vk.com/denigo360",
@@ -159,33 +161,39 @@ def fetch_residents(s, bid):
     return roster
 
 def _history_page(s, bid, uid, page):
-    """Одна страница истории профиля. Возвращает (uid, page, season_ids, has_more, had_season)."""
+    """Одна страница истории профиля. serverData уже содержит user.vk_id — забираем его даром
+    (без доп. запросов). Возвращает (uid, page, season_ids, has_more, had_season, vk_id)."""
     sd = ssr(s, bid, f"/stats/{uid}.json?page={page}&id={uid}&period=2026", kind="discovery")
     rows = sd.get("history") or []
     total = int(sd.get("historyTotal") or 0)
+    vk_id = str(((sd.get("user") or {}).get("vk_id")) or "").strip()
     season_ids, had_season = set(), 0
     for e in rows:
         if (e.get("date_start") or "") >= SEASON_FROM:
             season_ids.add(str(e["id"])); had_season += 1
     has_more = bool(rows) and page * 10 < total
-    return uid, page, season_ids, has_more, had_season
+    return uid, page, season_ids, has_more, had_season, vk_id
 
 def discover_relevant_tournaments(s, bid, roster):
-    """Объединение историй всех резидентов (сезон, вкл. star=0) — раундами параллельно."""
+    """Объединение историй всех резидентов (сезон, вкл. star=0) — раундами параллельно.
+    Заодно собираем vk_id из serverData каждого профиля (бесплатно). Возвращает (rel, vk_ids)."""
     rel = set()
+    vk_ids = {}
     active = list(roster.keys())
     page = 1
     while active:
         with ThreadPoolExecutor(max_workers=POOL) as ex:
             results = list(ex.map(lambda u: _history_page(s, bid, u, page), active))
         nxt = []
-        for uid, pg, season_ids, has_more, had_season in results:
+        for uid, pg, season_ids, has_more, had_season, vk_id in results:
             rel |= season_ids
+            if vk_id and uid not in vk_ids:
+                vk_ids[uid] = vk_id
             if has_more and had_season >= 10:
                 nxt.append(uid)
         active = nxt
         page += 1
-    return rel
+    return rel, vk_ids
 
 # ---------------- Оптимизация 3: кэш деталей турниров ----------------
 def tourn_path(tid):
@@ -318,9 +326,48 @@ def ensure_mafrate_months(force_all=False):
                    "current": sorted(current_keys)}
     return len(need), from_cache, season_info
 
+# ---------------- vk_id профилей (для динамических VK-ссылок) ----------------
+def fetch_vk_id(s, uid):
+    """POST /api/stats/get -> vk_id профиля. Фолбэк, если vk_id не пришёл из SSR-разведки
+    (напр. в warm-режиме без переразведки). Тело ответа/токены в лог не пишем."""
+    try:
+        doc = api_post(s, "stats/get", {"id": str(uid)}, kind="vkid")
+        return uid, str(((doc.get("data") or {}).get("user") or {}).get("vk_id") or "").strip()
+    except Exception:
+        return uid, ""
+
+def resolve_vk_links(s, roster, vk_ids, table):
+    """Построить {отображаемый_ник: VK-ссылка} для игроков таблицы (RT>0).
+    Приоритет: курируемый VK_LINKS (по нику) -> https://vk.com/id<vk_id> из профиля -> "".
+    vk_id берём из разведки (SSR, даром); для членов БЕЗ оверрайда, у кого его ещё нет, —
+    добираем POST /api/stats/get параллельно (только для них)."""
+    display2uid = {calc_core.display_nick(uid, roster): uid for uid in roster}
+    need_fetch = []
+    for nick, _rt in table:
+        if nick in VK_LINKS:
+            continue
+        uid = display2uid.get(nick)
+        if uid and not vk_ids.get(uid):
+            need_fetch.append(uid)
+    if need_fetch:
+        with ThreadPoolExecutor(max_workers=POOL) as ex:
+            for uid, vid in ex.map(lambda u: fetch_vk_id(s, u), need_fetch):
+                if vid:
+                    vk_ids[uid] = vid
+    links = {}
+    for nick, _rt in table:
+        if nick in VK_LINKS:
+            links[nick] = VK_LINKS[nick]
+            continue
+        uid = display2uid.get(nick)
+        vid = vk_ids.get(uid) if uid else None
+        links[nick] = ("https://vk.com/id%s" % vid) if vid else ""
+    return links
+
 # ---------------- прогон ----------------
 ROSTER_PATH = os.path.join(CACHE_DIR, "roster101.json")
 IDSET_PATH = os.path.join(TOURN_DIR, "_relevant_ids.json")   # кэш набора релевантных турниров
+VKIDS_PATH = os.path.join(CACHE_DIR, "vk_ids.json")          # кэш vk_id профилей (из SSR-разведки)
 
 def run(mode="cold"):
     cold = (mode == "cold")
@@ -333,13 +380,15 @@ def run(mode="cold"):
     if can_reuse:
         roster = json.load(open(ROSTER_PATH, encoding="utf-8"))
         relevant = set(json.load(open(IDSET_PATH, encoding="utf-8")))
+        vk_ids = json.load(open(VKIDS_PATH, encoding="utf-8")) if os.path.exists(VKIDS_PATH) else {}
         rediscovered = False
     else:
         bid = get_build_id(s)
         roster = fetch_residents(s, bid)
         json.dump(roster, open(ROSTER_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-        relevant = discover_relevant_tournaments(s, bid, roster)
+        relevant, vk_ids = discover_relevant_tournaments(s, bid, roster)
         json.dump(sorted(relevant, key=int), open(IDSET_PATH, "w", encoding="utf-8"))
+        json.dump(vk_ids, open(VKIDS_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         rediscovered = True
     t_disc = time.perf_counter() - t_disc0
 
@@ -355,6 +404,9 @@ def run(mode="cold"):
     t_calc0 = time.perf_counter()
     table = calc_core.compute_table(TOURN_DIR, CACHE_DIR, ROSTER_PATH)
     t_calc = time.perf_counter() - t_calc0
+
+    # ---- динамические VK-ссылки (оверрайд VK_LINKS -> vk.com/id<vk_id> из профиля) ----
+    vk_links = resolve_vk_links(s, roster, vk_ids, table)
 
     wall = time.perf_counter() - t0
     return {
@@ -373,13 +425,15 @@ def run(mode="cold"):
         "timings": {"discovery": round(t_disc, 2), "details": round(t_det, 2),
                     "mafrate": round(t_mf, 2), "calc": round(t_calc, 3), "wall": round(wall, 2)},
         "table": table,
+        "vk_links": vk_links,
     }
 
 # ---------------- запись в Google Sheet (RT DATA) ----------------
-def build_rows(table):
+def build_rows(table, vk_links):
     """table [(nick, rt), ...] (уже отсортирована по RT убыв.) -> строки данных [[Nick, VK, RT], ...].
+    VK берём из динамически построенной карты vk_links (оверрайд VK_LINKS + vk.com/id<vk_id>).
     Пишем только игроков с RT > 0 (это же ГАРД: сломанный источник обнуляет RT -> строк < порога)."""
-    return [[nick, VK_LINKS.get(nick, ""), rt] for nick, rt in table if rt and rt > 0]
+    return [[nick, vk_links.get(nick, ""), rt] for nick, rt in table if rt and rt > 0]
 
 
 # --- Аватарки игроков (бонус-фича для публичной HTML-таблицы; НИКОГДА не роняет запись RT) ---
@@ -454,12 +508,12 @@ def resolve_avatars(nick_links):
 # --- avatars.json: аватарки едут в репо/GitHub Pages, НЕ через закрытый лист-лидерборд ---
 AVATARS_JSON = os.path.join(os.path.dirname(HERE), "avatars.json")
 
-def write_avatars_json(table):
+def write_avatars_json(table, vk_links):
     """Резолвит аватарки и пишет {nick: photo_url} в avatars.json в корне репо
     (его коммитит workflow; публичная страница мёржит по нику). Бонус-фича:
     любой сбой не роняет прогон, а пустой результат НЕ затирает существующий файл."""
     try:
-        needed = [(nick, VK_LINKS.get(nick, "")) for nick, rt in table if rt and rt > 0]
+        needed = [(nick, vk_links.get(nick, "")) for nick, rt in table if rt and rt > 0]
         avatars = resolve_avatars(needed)
         if not avatars:
             print("[avatars] пусто (нет токена/резолвов) — avatars.json не трогаю")
@@ -489,10 +543,10 @@ def _gs_worksheet():
     sh = gc.open_by_key(SPREADSHEET_ID)
     return sh.worksheet(SHEET_NAME)
 
-def write_to_sheet(table):
+def write_to_sheet(table, vk_links):
     """ГАРД + идемпотентная запись в лист RT DATA. Возвращает число записанных строк данных.
     Гард на логин/сеть отработал раньше (run() уже бросил бы исключение до сюда)."""
-    data = build_rows(table)
+    data = build_rows(table, vk_links)
     if len(data) < MIN_ROWS:
         raise RuntimeError("ГАРД: итоговых строк %d < порога %d — источник считаем сломанным, "
                            "запись отменена" % (len(data), MIN_ROWS))
@@ -561,11 +615,14 @@ if __name__ == "__main__":
         if args.verify:
             verify(res["table"])
         if args.no_write:
-            data = build_rows(res["table"])
+            data = build_rows(res["table"], res["vk_links"])
             print("DRY-RUN: запись пропущена; к записи готово %d строк данных" % len(data))
+            print("VK-ссылок построено: %d (из них курируемых оверрайдов %d)"
+                  % (sum(1 for v in res["vk_links"].values() if v),
+                     sum(1 for n in res["vk_links"] if n in VK_LINKS)))
         else:
-            write_to_sheet(res["table"])
-            write_avatars_json(res["table"])
+            write_to_sheet(res["table"], res["vk_links"])
+            write_avatars_json(res["table"], res["vk_links"])
     except Exception as e:
         # понятное сообщение БЕЗ секретов; ненулевой код -> джоб GitHub Actions падает
         print("ОШИБКА КОНВЕЙЕРА: %s: %s" % (type(e).__name__, e), file=sys.stderr)
