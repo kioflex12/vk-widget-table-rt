@@ -31,7 +31,7 @@ Rules
     primary uid; if both accounts appear in the SAME event only the better position is counted.
     In the cached data the second accounts appear only in mafrate months (never in gomafia),
     so gomafia has no overlap and cat1 merges take the best month_total per rating-month.
-  * Exclusions: "Red Tiger Stars" (2621) -- annual final -- is dropped entirely.
+  * Exclusions: "Red Tiger Stars" (2621) и "Red Tiger Masters" (2859) -- итоговые турниры -- dropped entirely.
 """
 import json
 import os
@@ -172,8 +172,9 @@ def categorize(data):
     fsm = int(t.get('is_fsm_rating') or 0)
     creator_id = str((data.get('creator') or {}).get('id'))
 
-    # explicit exclusion: annual final "Red Tiger Stars" (id 2621)
-    if 'red tiger stars' in tl:
+    # explicit exclusions: итоговые/годовые турниры клуба — вне зачёта нигде.
+    #   "Red Tiger Stars" (2621) и "Red Tiger Masters" (2859) — итоговые, не считаются.
+    if 'red tiger stars' in tl or 'red tiger masters' in tl:
         return None
     # attestational tournaments scored like a monthly rating
     if 'аттестац' in tl:
